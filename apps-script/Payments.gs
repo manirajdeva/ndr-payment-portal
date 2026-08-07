@@ -44,7 +44,8 @@ function action_savePayment(params) {
     }
 
     var sheet = getSheet_(SHEET_NAMES.PAYMENTS);
-    var existingSum = sumPaymentsForStudent_(sheet, data['Student ID'], null);
+    var sheetData = getSheetData_(sheet);
+    var existingSum = sumPaymentsForStudent_(sheetData, data['Student ID'], null);
     var pending = round2_(totalFee - (existingSum + received));
     if (pending < 0) {
       throw new AppError_('OVERPAYMENT', 'This payment exceeds the pending amount. Maximum allowed right now: ' + round2_(totalFee - existingSum) + '.');
@@ -63,7 +64,7 @@ function action_savePayment(params) {
       'Payment Date': data['Payment Date'] || todayStr_(),
       'CreatedAt': nowIso_()
     };
-    appendObjectRow_(sheet, row);
+    appendObjectRow_(sheet, row, sheetData.headers);
     return row;
   } finally {
     lock.releaseLock();
@@ -89,10 +90,11 @@ function action_updatePayment(params) {
     if (!(rowIndex >= 2) || rowIndex > sheet.getLastRow()) {
       throw new AppError_('NOT_FOUND', 'Payment record not found.');
     }
-    var map = headerIndexMap_(sheet);
-    var studentId = sheet.getRange(rowIndex, map['Student ID']).getValue();
+    var sheetData = getSheetData_(sheet);
+    var studentIdCol = sheetData.headers.indexOf('Student ID');
+    var studentId = sheetData.dataRows[rowIndex - 2][studentIdCol];
 
-    var otherSum = sumPaymentsForStudent_(sheet, studentId, rowIndex);
+    var otherSum = sumPaymentsForStudent_(sheetData, studentId, rowIndex);
     var pending = round2_(totalFee - (otherSum + received));
     if (pending < 0) {
       throw new AppError_('OVERPAYMENT', 'This payment exceeds the pending amount. Maximum allowed right now: ' + round2_(totalFee - otherSum) + '.');
@@ -106,7 +108,7 @@ function action_updatePayment(params) {
       'Pending Amount': pending,
       'Payment Date': data['Payment Date'] || todayStr_()
     };
-    writeObjectToRow_(sheet, rowIndex, update);
+    writeObjectToRow_(sheet, rowIndex, update, sheetData.headers);
     return update;
   } finally {
     lock.releaseLock();
@@ -131,17 +133,16 @@ function action_deletePayment(params) {
   }
 }
 
-function sumPaymentsForStudent_(sheet, studentId, excludeRowIndex) {
-  var lastRow = sheet.getLastRow();
-  if (lastRow < 2) return 0;
-  var map = headerIndexMap_(sheet);
-  var values = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
+/** `sheetData` is { headers, dataRows } from getSheetData_ — no sheet access here, pure in-memory. */
+function sumPaymentsForStudent_(sheetData, studentId, excludeRowIndex) {
+  var idCol = sheetData.headers.indexOf('Student ID');
+  var receivedCol = sheetData.headers.indexOf('Payment Received');
   var sum = 0;
-  for (var i = 0; i < values.length; i++) {
+  for (var i = 0; i < sheetData.dataRows.length; i++) {
     var actualRow = i + 2;
     if (excludeRowIndex && actualRow === excludeRowIndex) continue;
-    if (String(values[i][map['Student ID'] - 1]).trim() === String(studentId).trim()) {
-      sum += Number(values[i][map['Payment Received'] - 1]) || 0;
+    if (String(sheetData.dataRows[i][idCol]).trim() === String(studentId).trim()) {
+      sum += Number(sheetData.dataRows[i][receivedCol]) || 0;
     }
   }
   return round2_(sum);
@@ -153,16 +154,21 @@ function validatePaymentMethod_(method) {
   }
 }
 
-/** Caller must already hold the script lock. */
+/** Caller must already hold the script lock. Reads/writes Counters in one round trip each. */
 function nextPaymentId_() {
   var counters = getSheet_(SHEET_NAMES.COUNTERS);
-  var rowIndex = findRowByValue_(counters, 'Year', 'PAYMENT_SEQ');
+  var data = counters.getDataRange().getValues();
+  var rowIndex = -1;
+  for (var i = 1; i < data.length; i++) {
+    if (String(data[i][0]) === 'PAYMENT_SEQ') { rowIndex = i + 1; break; }
+  }
+
   var nextSeq;
   if (rowIndex === -1) {
     nextSeq = 1;
     counters.appendRow(['PAYMENT_SEQ', nextSeq]);
   } else {
-    nextSeq = Number(counters.getRange(rowIndex, 2).getValue()) + 1;
+    nextSeq = Number(data[rowIndex - 1][1]) + 1;
     counters.getRange(rowIndex, 2).setValue(nextSeq);
   }
   return 'PMT' + ('000000' + nextSeq).slice(-6);

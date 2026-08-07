@@ -51,20 +51,39 @@ function errorResponse_(err) {
   return { success: false, error: { code: code, message: message } };
 }
 
-/** Reads all rows of a sheet into an array of plain objects keyed by header. */
-function readAllRows_(sheet) {
+/**
+ * Reads the whole sheet in a single call and returns { headers, dataRows }.
+ * Prefer this over separate header/data reads — every extra getRange() or
+ * getValues() call is its own round trip and Apps Script's per-call
+ * overhead adds up fast on a web app request.
+ */
+function getSheetData_(sheet) {
   var lastRow = sheet.getLastRow();
   var lastCol = sheet.getLastColumn();
-  if (lastRow < 2) return [];
-  var values = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
-  var headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  if (lastRow < 1) return { headers: [], dataRows: [] };
+  var values = sheet.getRange(1, 1, lastRow, lastCol).getValues();
+  return { headers: values[0], dataRows: values.slice(1) };
+}
+
+/** Reads all rows of a sheet into an array of plain objects keyed by header. */
+function readAllRows_(sheet) {
+  return readAllRowsWithHeaders_(sheet).rows;
+}
+
+/**
+ * Same as readAllRows_, but also returns the header row — pass it on to
+ * appendObjectRow_/writeObjectToRow_ afterwards to avoid re-fetching
+ * headers you already have in hand.
+ */
+function readAllRowsWithHeaders_(sheet) {
+  var sheetData = getSheetData_(sheet);
   var rows = [];
-  for (var i = 0; i < values.length; i++) {
-    var obj = rowToObject_(headers, values[i]);
+  for (var i = 0; i < sheetData.dataRows.length; i++) {
+    var obj = rowToObject_(sheetData.headers, sheetData.dataRows[i]);
     obj._row = i + 2; // 1-based sheet row number, for updates/deletes
     rows.push(obj);
   }
-  return rows;
+  return { rows: rows, headers: sheetData.headers };
 }
 
 function rowToObject_(headers, values) {
@@ -93,11 +112,15 @@ function nowIso_() {
   return new Date().toISOString();
 }
 
-/** Finds the row index (1-based) of the first row where column value === match. */
-function findRowByValue_(sheet, columnName, match) {
+/**
+ * Finds the row index (1-based) of the first row where column value === match.
+ * Pass pre-fetched `headers` (e.g. from getSheetData_) to skip an extra
+ * round trip when the caller already has them.
+ */
+function findRowByValue_(sheet, columnName, match, headers) {
   var lastRow = sheet.getLastRow();
   if (lastRow < 2) return -1;
-  var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  headers = headers || sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
   var colIdx = headers.indexOf(columnName);
   if (colIdx === -1) return -1;
   var values = sheet.getRange(2, colIdx + 1, lastRow - 1, 1).getValues();
@@ -109,15 +132,17 @@ function findRowByValue_(sheet, columnName, match) {
   return -1;
 }
 
-function headerIndexMap_(sheet) {
-  var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+/** Pass pre-fetched `headers` to skip an extra round trip when the caller already has them. */
+function headerIndexMap_(sheet, headers) {
+  headers = headers || sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
   var map = {};
   for (var i = 0; i < headers.length; i++) map[headers[i]] = i + 1;
   return map;
 }
 
-function writeObjectToRow_(sheet, rowIndex, obj) {
-  var map = headerIndexMap_(sheet);
+/** Pass pre-fetched `headers` to skip an extra round trip when the caller already has them. */
+function writeObjectToRow_(sheet, rowIndex, obj, headers) {
+  var map = headerIndexMap_(sheet, headers);
   Object.keys(obj).forEach(function (key) {
     if (map[key]) {
       sheet.getRange(rowIndex, map[key]).setValue(obj[key]);
@@ -125,8 +150,9 @@ function writeObjectToRow_(sheet, rowIndex, obj) {
   });
 }
 
-function appendObjectRow_(sheet, obj) {
-  var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+/** Pass pre-fetched `headers` to skip an extra round trip when the caller already has them. */
+function appendObjectRow_(sheet, obj, headers) {
+  headers = headers || sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
   var row = headers.map(function (h) { return obj.hasOwnProperty(h) ? obj[h] : ''; });
   sheet.appendRow(row);
   return sheet.getLastRow();

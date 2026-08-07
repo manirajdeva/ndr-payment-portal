@@ -22,18 +22,22 @@ function action_generateStudentID() {
   }
 }
 
-/** Caller must already hold the script lock. */
+/** Caller must already hold the script lock. Reads/writes Counters in one round trip each. */
 function generateStudentId_() {
   var counters = getSheet_(SHEET_NAMES.COUNTERS);
   var year = new Date().getFullYear();
-  var rowIndex = findRowByValue_(counters, 'Year', year);
+  var data = counters.getDataRange().getValues(); // [ [Year, LastSeq], ... ], row 0 = headers
+  var rowIndex = -1;
+  for (var i = 1; i < data.length; i++) {
+    if (Number(data[i][0]) === year) { rowIndex = i + 1; break; } // 1-based sheet row
+  }
+
   var nextSeq;
   if (rowIndex === -1) {
     nextSeq = 1;
     counters.appendRow([year, nextSeq]);
   } else {
-    var lastSeq = counters.getRange(rowIndex, 2).getValue();
-    nextSeq = Number(lastSeq) + 1;
+    nextSeq = Number(data[rowIndex - 1][1]) + 1;
     counters.getRange(rowIndex, 2).setValue(nextSeq);
   }
   var seqStr = ('0000' + nextSeq).slice(-4);
@@ -86,7 +90,8 @@ function action_addStudent(params) {
   lock.waitLock(30000);
   try {
     var sheet = getSheet_(SHEET_NAMES.ENQUIRIES);
-    assertNoDuplicateStudent_(sheet, data, null);
+    var sheetData = readAllRowsWithHeaders_(sheet);
+    assertNoDuplicateStudent_(sheetData.rows, data, null);
 
     var studentId = generateStudentId_();
     var now = nowIso_();
@@ -102,7 +107,7 @@ function action_addStudent(params) {
       'CreatedAt': now,
       'UpdatedAt': now
     };
-    appendObjectRow_(sheet, row);
+    appendObjectRow_(sheet, row, sheetData.headers);
     return row;
   } finally {
     lock.releaseLock();
@@ -126,11 +131,12 @@ function action_updateStudent(params) {
   lock.waitLock(30000);
   try {
     var sheet = getSheet_(SHEET_NAMES.ENQUIRIES);
-    var rowIndex = findRowByValue_(sheet, 'Student ID', data['Student ID']);
-    if (rowIndex === -1) {
+    var sheetData = readAllRowsWithHeaders_(sheet);
+    var existing = sheetData.rows.find(function (row) { return row['Student ID'] === data['Student ID']; });
+    if (!existing) {
       throw new AppError_('NOT_FOUND', 'Student not found.');
     }
-    assertNoDuplicateStudent_(sheet, data, data['Student ID']);
+    assertNoDuplicateStudent_(sheetData.rows, data, data['Student ID']);
 
     var update = {
       'Student Name': String(data['Student Name']).trim(),
@@ -142,7 +148,7 @@ function action_updateStudent(params) {
       'Mobile Number': String(data['Mobile Number']).trim(),
       'UpdatedAt': nowIso_()
     };
-    writeObjectToRow_(sheet, rowIndex, update);
+    writeObjectToRow_(sheet, existing._row, update, sheetData.headers);
 
     var studentName = update['Student Name'];
     syncStudentNameEverywhere_(data['Student ID'], studentName, update['Course']);
@@ -174,9 +180,8 @@ function action_deleteStudent(params) {
   }
 }
 
-/** Ensures Student ID / Mobile / Email are unique, excluding the given student id (for updates). */
-function assertNoDuplicateStudent_(sheet, data, excludeStudentId) {
-  var rows = readAllRows_(sheet);
+/** Ensures Student ID / Mobile / Email are unique among `rows`, excluding the given student id (for updates). */
+function assertNoDuplicateStudent_(rows, data, excludeStudentId) {
   var mobile = String(data['Mobile Number']).trim();
   var email = String(data['Gmail']).trim().toLowerCase();
 
