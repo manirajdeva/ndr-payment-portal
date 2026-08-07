@@ -3,3 +3,8 @@ Thumbs.db
 node_modules/
 .vscode/
 *.log
+
+# Local clasp-linked staging copy used to deploy apps-script/ to a specific
+# Google account's script project (.clasp.json ties it to that account's
+# scriptId). Not shared source of truth — apps-script/ is.
+gas-deploy/

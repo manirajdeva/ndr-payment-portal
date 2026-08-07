@@ -14,7 +14,7 @@
  * clicked through without a Google account — see README.md "Local testing".
  */
 
-const PRODUCTION_APP_SCRIPT_URL = 'https://script.google.com/macros/s/REPLACE_WITH_YOUR_DEPLOYMENT_ID/exec';
+const PRODUCTION_APP_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxXPv0ylbo6CRK2lt3xLahnDauEOoBRUr8jvdSujEMEh5EWAemBNCS-8JINudN86Cj0/exec';
 const LOCAL_MOCK_API_URL = 'http://localhost:3001/exec';
 
 const APP_SCRIPT_URL = ['localhost', '127.0.0.1'].includes(location.hostname)
