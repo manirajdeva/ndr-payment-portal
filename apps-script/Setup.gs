@@ -15,8 +15,8 @@ function setup() {
   ensureSheet_(spreadsheet, SHEET_NAMES.CONFIG, ['Key', 'Value']);
   ensureSheet_(spreadsheet, SHEET_NAMES.COUNTERS, ['Year', 'LastSeq']);
   ensureSheet_(spreadsheet, SHEET_NAMES.ENQUIRIES, [
-    'Student ID', 'Student Name', 'Enquiry Date', 'Course', 'Referred By',
-    'Gmail', 'Mobile Number', 'CreatedAt', 'UpdatedAt'
+    'Student ID', 'Student Name', 'Enquiry Date', 'Course', 'Qualification',
+    'Referred By', 'Gmail', 'Mobile Number', 'CreatedAt', 'UpdatedAt'
   ]);
   ensureSheet_(spreadsheet, SHEET_NAMES.JOBS, [
     'Student ID', 'Student Name', 'Office Joining Date', 'Job Status',

@@ -118,6 +118,7 @@
                   <th data-sort="Student Name">Name</th>
                   <th data-sort="Enquiry Date">Enquiry Date</th>
                   <th data-sort="Course">Course</th>
+                  <th data-sort="Qualification">Qualification</th>
                   <th>Referred By</th>
                   <th>Mobile</th>
                   <th>Email</th>
@@ -337,6 +338,18 @@
             <div class="col-md-6">
               <label class="form-label">Course <span class="text-danger">*</span></label>
               <input type="text" class="form-control" id="enqCourse" required placeholder="e.g. Full Stack Development">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Qualification</label>
+              <select class="form-select" id="enqQualification">
+                <option value="">Select qualification</option>
+                <option>10th</option>
+                <option>12th</option>
+                <option>Diploma</option>
+                <option>Graduate</option>
+                <option>Post Graduate</option>
+                <option>Other</option>
+              </select>
             </div>
             <div class="col-md-6">
               <label class="form-label">Mobile Number <span class="text-danger">*</span></label>

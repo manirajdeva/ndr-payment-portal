@@ -28,6 +28,7 @@ const JOB_STATUS_OPTIONS = [
   'Selected', 'Offer Received', 'Joined', 'Rejected'
 ];
 const PAYMENT_METHODS = ['Cash', 'UPI', 'Google Pay', 'PhonePe', 'Bank Transfer', 'Credit Card', 'Debit Card'];
+const QUALIFICATION_OPTIONS = ['10th', '12th', 'Diploma', 'Graduate', 'Post Graduate', 'Other'];
 
 /* ---------------- In-memory store ---------------- */
 
@@ -163,6 +164,12 @@ function getStudentById(studentId) {
   return db.students.find(s => s['Student ID'] === studentId) || null;
 }
 
+function validateQualificationValue(qualification) {
+  if (!isBlank(qualification) && !QUALIFICATION_OPTIONS.includes(qualification)) {
+    throw new AppError('VALIDATION_ERROR', 'Invalid qualification value.');
+  }
+}
+
 function assertNoDuplicateStudent(data, excludeStudentId) {
   const mobile = String(data['Mobile Number']).trim();
   const email = String(data['Gmail']).trim().toLowerCase();
@@ -203,6 +210,7 @@ function action_addStudent(params) {
   requireFields(data, ['Student Name', 'Course', 'Gmail', 'Mobile Number']);
   if (!isValidEmail(data['Gmail'])) throw new AppError('VALIDATION_ERROR', 'Please enter a valid email address.');
   if (!isValidMobile(data['Mobile Number'])) throw new AppError('VALIDATION_ERROR', 'Please enter a valid 10-digit mobile number.');
+  validateQualificationValue(data['Qualification']);
   assertNoDuplicateStudent(data, null);
 
   const now = nowIso();
@@ -211,6 +219,7 @@ function action_addStudent(params) {
     'Student Name': String(data['Student Name']).trim(),
     'Enquiry Date': data['Enquiry Date'] || todayISO(),
     'Course': data['Course'],
+    'Qualification': data['Qualification'] || '',
     'Referred By': data['Referred By'] || '',
     'Gmail': String(data['Gmail']).trim().toLowerCase(),
     'Mobile Number': String(data['Mobile Number']).trim(),
@@ -226,6 +235,7 @@ function action_updateStudent(params) {
   requireFields(data, ['Student ID', 'Student Name', 'Course', 'Gmail', 'Mobile Number']);
   if (!isValidEmail(data['Gmail'])) throw new AppError('VALIDATION_ERROR', 'Please enter a valid email address.');
   if (!isValidMobile(data['Mobile Number'])) throw new AppError('VALIDATION_ERROR', 'Please enter a valid 10-digit mobile number.');
+  validateQualificationValue(data['Qualification']);
 
   const student = getStudentById(data['Student ID']);
   if (!student) throw new AppError('NOT_FOUND', 'Student not found.');
@@ -235,6 +245,7 @@ function action_updateStudent(params) {
     'Student Name': String(data['Student Name']).trim(),
     'Enquiry Date': data['Enquiry Date'],
     'Course': data['Course'],
+    'Qualification': data['Qualification'] || '',
     'Referred By': data['Referred By'] || '',
     'Gmail': String(data['Gmail']).trim().toLowerCase(),
     'Mobile Number': String(data['Mobile Number']).trim(),
@@ -527,6 +538,7 @@ function seed() {
       'Student Name': name,
       'Enquiry Date': enquiryDate,
       'Course': courses[i % courses.length],
+      'Qualification': QUALIFICATION_OPTIONS[i % QUALIFICATION_OPTIONS.length],
       'Referred By': i % 3 === 0 ? 'Friend' : '',
       'Gmail': name.toLowerCase().replace(/\s+/g, '.') + '@example.com',
       'Mobile Number': '9' + String(100000000 + i * 7654321).slice(0, 9),

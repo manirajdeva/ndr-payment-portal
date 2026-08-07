@@ -4,6 +4,14 @@
  * duplicate prevention, search, pagination, sorting.
  */
 
+var QUALIFICATION_OPTIONS = ['10th', '12th', 'Diploma', 'Graduate', 'Post Graduate', 'Other'];
+
+function validateQualificationValue_(qualification) {
+  if (!isBlank_(qualification) && QUALIFICATION_OPTIONS.indexOf(qualification) === -1) {
+    throw new AppError_('VALIDATION_ERROR', 'Invalid qualification value.');
+  }
+}
+
 function action_generateStudentID() {
   var lock = LockService.getScriptLock();
   lock.waitLock(30000);
@@ -72,6 +80,7 @@ function action_addStudent(params) {
   if (!isValidMobile_(data['Mobile Number'])) {
     throw new AppError_('VALIDATION_ERROR', 'Please enter a valid 10-digit mobile number.');
   }
+  validateQualificationValue_(data['Qualification']);
 
   var lock = LockService.getScriptLock();
   lock.waitLock(30000);
@@ -86,6 +95,7 @@ function action_addStudent(params) {
       'Student Name': String(data['Student Name']).trim(),
       'Enquiry Date': data['Enquiry Date'] || todayStr_(),
       'Course': data['Course'],
+      'Qualification': data['Qualification'] || '',
       'Referred By': data['Referred By'] || '',
       'Gmail': String(data['Gmail']).trim().toLowerCase(),
       'Mobile Number': String(data['Mobile Number']).trim(),
@@ -110,6 +120,7 @@ function action_updateStudent(params) {
   if (!isValidMobile_(data['Mobile Number'])) {
     throw new AppError_('VALIDATION_ERROR', 'Please enter a valid 10-digit mobile number.');
   }
+  validateQualificationValue_(data['Qualification']);
 
   var lock = LockService.getScriptLock();
   lock.waitLock(30000);
@@ -125,6 +136,7 @@ function action_updateStudent(params) {
       'Student Name': String(data['Student Name']).trim(),
       'Enquiry Date': data['Enquiry Date'],
       'Course': data['Course'],
+      'Qualification': data['Qualification'] || '',
       'Referred By': data['Referred By'] || '',
       'Gmail': String(data['Gmail']).trim().toLowerCase(),
       'Mobile Number': String(data['Mobile Number']).trim(),

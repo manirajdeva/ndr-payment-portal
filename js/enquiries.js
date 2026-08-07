@@ -14,6 +14,7 @@ const Enquiries = (() => {
     { key: 'Student Name', label: 'Student Name' },
     { key: 'Enquiry Date', label: 'Enquiry Date' },
     { key: 'Course', label: 'Course' },
+    { key: 'Qualification', label: 'Qualification' },
     { key: 'Referred By', label: 'Referred By' },
     { key: 'Gmail', label: 'Email' },
     { key: 'Mobile Number', label: 'Mobile Number' }
@@ -40,7 +41,7 @@ const Enquiries = (() => {
   function renderTable(rows) {
     const tbody = document.getElementById('enqTableBody');
     if (!rows.length) {
-      tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted py-4">No students found.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="9" class="text-center text-muted py-4">No students found.</td></tr>`;
       return;
     }
     tbody.innerHTML = rows.map(row => `
@@ -49,6 +50,7 @@ const Enquiries = (() => {
         <td>${Utils.escapeHtml(row['Student Name'])}</td>
         <td>${Utils.formatDate(row['Enquiry Date'])}</td>
         <td>${Utils.escapeHtml(row['Course'])}</td>
+        <td>${Utils.escapeHtml(row['Qualification'] || '-')}</td>
         <td>${Utils.escapeHtml(row['Referred By'] || '-')}</td>
         <td>${Utils.escapeHtml(row['Mobile Number'])}</td>
         <td>${Utils.escapeHtml(row['Gmail'])}</td>
@@ -81,6 +83,7 @@ const Enquiries = (() => {
     document.getElementById('enqDate').value = row['Enquiry Date'];
     document.getElementById('enqName').value = row['Student Name'];
     document.getElementById('enqCourse').value = row['Course'];
+    document.getElementById('enqQualification').value = row['Qualification'] || '';
     document.getElementById('enqMobile').value = row['Mobile Number'];
     document.getElementById('enqEmail').value = row['Gmail'];
     document.getElementById('enqReferredBy').value = row['Referred By'] || '';
@@ -107,6 +110,7 @@ const Enquiries = (() => {
       'Student Name': document.getElementById('enqName').value.trim(),
       'Enquiry Date': document.getElementById('enqDate').value,
       'Course': document.getElementById('enqCourse').value.trim(),
+      'Qualification': document.getElementById('enqQualification').value,
       'Referred By': document.getElementById('enqReferredBy').value.trim(),
       'Gmail': email,
       'Mobile Number': mobile
