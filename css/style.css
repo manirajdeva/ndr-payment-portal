@@ -231,6 +231,7 @@ a { text-decoration: none; }
 
 .card {
   background: var(--surface);
+  color: var(--text);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
@@ -315,6 +316,7 @@ table.data-table tbody td {
   border-bottom: 1px solid var(--border);
   font-size: 0.87rem;
   white-space: nowrap;
+  color: var(--text);
 }
 
 table.data-table tbody tr:last-child td { border-bottom: none; }
@@ -395,6 +397,60 @@ table.data-table tbody tr:hover { background: var(--surface-alt); }
 .btn-sm-icon.edit { color: var(--primary); }
 .btn-sm-icon.delete { color: var(--danger); }
 .btn-sm-icon:hover { background: var(--surface-alt); }
+
+/* ---------------- Bootstrap component theming ----------------
+   Bootstrap's own CSS ships light-mode colors regardless of our
+   [data-theme] attribute, so components we didn't already restyle
+   above (modals, alerts, list-groups, badges, plain tables) default
+   to dark text that's unreadable against our dark surfaces. Override
+   them with our own variables so every Bootstrap component follows
+   the current theme. */
+
+.modal-content {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.modal-header, .modal-footer { border-color: var(--border); }
+[data-theme="dark"] .btn-close { filter: invert(1) grayscale(100%) brightness(200%); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .btn-close { filter: invert(1) grayscale(100%) brightness(200%); }
+}
+
+.list-group-item {
+  background: var(--surface);
+  color: var(--text);
+  border-color: var(--border);
+}
+.list-group-item-action:hover, .list-group-item-action:focus {
+  background: var(--surface-alt);
+  color: var(--text);
+}
+
+.alert-info {
+  background: var(--primary-light);
+  color: var(--text);
+  border-color: var(--border);
+}
+.alert-warning { background: #fef3c7; color: #92400e; border-color: #fde68a; }
+.alert-danger { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
+[data-theme="dark"] .alert-warning { background: #3a2e0a; color: #fbbf24; border-color: #5a4713; }
+[data-theme="dark"] .alert-danger { background: #3a1414; color: #f87171; border-color: #5a1f1f; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .alert-warning { background: #3a2e0a; color: #fbbf24; border-color: #5a4713; }
+  :root:not([data-theme="light"]) .alert-danger { background: #3a1414; color: #f87171; border-color: #5a1f1f; }
+}
+
+.table { color: var(--text); }
+.table > :not(caption) > * > * { border-bottom-color: var(--border); color: var(--text); background: transparent; }
+
+code {
+  background: var(--surface-alt);
+  color: var(--primary);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
 
 /* ---------------- Misc ---------------- */
 
