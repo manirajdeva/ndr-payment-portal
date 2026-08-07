@@ -2,11 +2,18 @@
  * payments.js
  * Module 3 — Student Payments: multiple entries per student, running
  * balance preview, overpayment prevention, CRUD table, export.
+ *
+ * Add/Edit/Delete update the on-screen table immediately (optimistic UI)
+ * instead of waiting for the Apps Script round trip. The real request still
+ * runs in the background and is the final word on validity (e.g.
+ * overpayment) — if it's rejected, the change is rolled back and the form
+ * is restored so nothing the user typed is lost.
  */
 
 const Payments = (() => {
   const state = { page: 1, pageSize: 10, search: '', sortBy: 'CreatedAt', sortDir: 'desc' };
   let cache = [];
+  let meta = { total: 0, page: 1, pageSize: 10, totalPages: 1 };
   let selectedStudent = null;
   let editingRow = null; // row object being edited, used to exclude it from "already paid" totals
 
@@ -33,16 +40,21 @@ const Payments = (() => {
     try {
       const result = await Api.getPayments(state);
       cache = result.rows;
-      renderTable(result.rows);
+      meta = { total: result.total, page: result.page, pageSize: result.pageSize, totalPages: result.totalPages };
+      renderTable(cache);
+      renderPaginationBar();
       Utils.wireSortableHeaders(document.getElementById('payTable'), state, (field, dir) => {
         state.sortBy = field; state.sortDir = dir; load();
       });
-      Utils.renderPagination(document.getElementById('payPagination'), result, (page) => { state.page = page; load(); });
     } catch (err) {
       Utils.error(err.message);
     } finally {
       Utils.hideLoading();
     }
+  }
+
+  function renderPaginationBar() {
+    Utils.renderPagination(document.getElementById('payPagination'), meta, (page) => { state.page = page; load(); });
   }
 
   function renderTable(rows) {
@@ -55,7 +67,7 @@ const Payments = (() => {
       const pending = Number(row['Pending Amount']) || 0;
       const pendingClass = pending > 0 ? 'text-danger' : 'text-success';
       return `
-      <tr>
+      <tr class="${row._pending ? 'row-pending' : ''}">
         <td>${Utils.escapeHtml(row['Payment ID'])}</td>
         <td><span class="fw-semibold text-primary">${Utils.escapeHtml(row['Student ID'])}</span></td>
         <td>${Utils.escapeHtml(row['Student Name'])}</td>
@@ -65,8 +77,10 @@ const Payments = (() => {
         <td>${Utils.escapeHtml(row['Payment Method'])}</td>
         <td>${Utils.formatDate(row['Payment Date'])}</td>
         <td>
-          <button class="btn-sm-icon edit" data-action="edit" data-row="${row._row}" title="Edit"><i class="fa-solid fa-pen"></i></button>
-          <button class="btn-sm-icon delete" data-action="delete" data-row="${row._row}" title="Delete"><i class="fa-solid fa-trash"></i></button>
+          ${row._pending ? Utils.pendingIndicatorHtml() : `
+            <button class="btn-sm-icon edit" data-action="edit" data-row="${row._row}" title="Edit"><i class="fa-solid fa-pen"></i></button>
+            <button class="btn-sm-icon delete" data-action="delete" data-row="${row._row}" title="Delete"><i class="fa-solid fa-trash"></i></button>
+          `}
         </td>
       </tr>`;
     }).join('');
@@ -84,7 +98,10 @@ const Payments = (() => {
     updatePendingPreview(0, 0);
   }
 
+  let currentSummary = { totalPaid: 0, pendingBefore: 0 };
+
   function updatePendingPreview(totalPaid, pendingBefore) {
+    currentSummary = { totalPaid, pendingBefore };
     document.getElementById('payPendingPreview').textContent =
       `Already paid: ${Utils.formatCurrency(totalPaid)} · Pending before this payment: ${Utils.formatCurrency(pendingBefore)}`;
   }
@@ -120,7 +137,16 @@ const Payments = (() => {
     document.getElementById('payForm').reset();
     document.getElementById('payRowHidden').value = rowIndex;
     populateMethodDropdown();
+    fillForm(row);
 
+    new bootstrap.Modal('#payModal').show();
+
+    const summary = await getStudentPaymentSummary(row['Student ID']);
+    updatePendingPreview(summary.totalPaid, summary.pendingBefore);
+  }
+
+  /** Fills the form (and student picker) from a row-like object; used for edit and for restoring after a failed save. */
+  function fillForm(row) {
     selectedStudent = { 'Student ID': row['Student ID'], 'Student Name': row['Student Name'] };
     document.getElementById('payStudentSearch').value = `${row['Student ID']} — ${row['Student Name']}`;
     document.getElementById('payStudentSearch').readOnly = true;
@@ -130,11 +156,16 @@ const Payments = (() => {
     document.getElementById('payReceived').value = row['Payment Received'];
     document.getElementById('payMethod').value = row['Payment Method'];
     document.getElementById('payDate').value = row['Payment Date'] || Utils.todayISO();
+  }
 
-    new bootstrap.Modal('#payModal').show();
-
-    const summary = await getStudentPaymentSummary(row['Student ID']);
-    updatePendingPreview(summary.totalPaid, summary.pendingBefore);
+  function readForm() {
+    return {
+      'Job Offer Date': document.getElementById('payJobOfferDate').value,
+      'Total Course Fee': Number(document.getElementById('payTotalFee').value),
+      'Payment Received': Number(document.getElementById('payReceived').value),
+      'Payment Method': document.getElementById('payMethod').value,
+      'Payment Date': document.getElementById('payDate').value
+    };
   }
 
   function wireStudentSearch() {
@@ -184,7 +215,7 @@ const Payments = (() => {
     });
   }
 
-  async function handleSubmit(e) {
+  function handleSubmit(e) {
     e.preventDefault();
     const rowIndex = document.getElementById('payRowHidden').value;
     const isEdit = !!rowIndex;
@@ -194,42 +225,103 @@ const Payments = (() => {
       return;
     }
 
-    const totalFee = Number(document.getElementById('payTotalFee').value);
-    const received = Number(document.getElementById('payReceived').value);
+    const data = readForm();
+    if (data['Total Course Fee'] < 0) { Utils.error('Total Course Fee cannot be negative.'); return; }
+    if (data['Payment Received'] <= 0) { Utils.error('Payment Received must be greater than zero.'); return; }
 
-    if (totalFee < 0) { Utils.error('Total Course Fee cannot be negative.'); return; }
-    if (received <= 0) { Utils.error('Payment Received must be greater than zero.'); return; }
-
-    const data = {
-      'Job Offer Date': document.getElementById('payJobOfferDate').value,
-      'Total Course Fee': totalFee,
-      'Payment Received': received,
-      'Payment Method': document.getElementById('payMethod').value,
-      'Payment Date': document.getElementById('payDate').value
-    };
-    if (isEdit) data._row = Number(rowIndex);
-    else data['Student ID'] = selectedStudent['Student ID'];
-
-    const btn = document.getElementById('paySaveBtn');
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving...';
-
-    try {
-      if (isEdit) {
-        await Api.updatePayment(data);
-        Utils.success('Payment updated successfully.');
-      } else {
-        await Api.savePayment(data);
-        Utils.success('Payment recorded successfully.');
-      }
-      bootstrap.Modal.getInstance(document.getElementById('payModal'))?.hide();
-      load();
-    } catch (err) {
-      Utils.error(err.message);
-    } finally {
-      btn.disabled = false;
-      btn.innerHTML = 'Save';
+    if (isEdit) {
+      submitEdit(Number(rowIndex), selectedStudent, data);
+    } else {
+      submitAdd(selectedStudent, data);
     }
+  }
+
+  function submitAdd(student, data) {
+    bootstrap.Modal.getInstance(document.getElementById('payModal'))?.hide();
+
+    const isDefaultView = !state.search && state.page === 1 && state.sortBy === 'CreatedAt' && state.sortDir === 'desc';
+    const now = new Date().toISOString();
+    const tempId = Utils.genTempId();
+    // Pending shown here is a best-effort client estimate from currentSummary; the server
+    // recomputes it authoritatively on save and can reject the payment as an overpayment.
+    const estimatedPending = Math.max(0, data['Total Course Fee'] - (currentSummary.totalPaid + data['Payment Received']));
+
+    const tempRow = Object.assign({
+      'Payment ID': 'Pending...', 'Student ID': student['Student ID'], 'Student Name': student['Student Name'],
+      'Pending Amount': estimatedPending, 'CreatedAt': now, _pending: true, _tempId: tempId
+    }, data);
+
+    if (isDefaultView) {
+      cache = [tempRow, ...cache].slice(0, state.pageSize);
+      meta = { ...meta, total: meta.total + 1, totalPages: Math.max(1, Math.ceil((meta.total + 1) / state.pageSize)) };
+      renderTable(cache);
+      renderPaginationBar();
+    } else {
+      Utils.info('Saving payment...');
+    }
+
+    const payload = Object.assign({ 'Student ID': student['Student ID'] }, data);
+    Api.savePayment(payload).then(saved => {
+      if (isDefaultView) {
+        const idx = cache.findIndex(r => r._tempId === tempId);
+        if (idx !== -1) {
+          cache[idx] = saved;
+          renderTable(cache);
+        }
+      }
+      Utils.success('Payment recorded successfully.');
+    }).catch(err => {
+      if (isDefaultView) {
+        const idx = cache.findIndex(r => r._tempId === tempId);
+        if (idx !== -1) cache.splice(idx, 1);
+        meta = { ...meta, total: Math.max(0, meta.total - 1), totalPages: Math.max(1, Math.ceil(Math.max(0, meta.total - 1) / state.pageSize)) };
+        renderTable(cache);
+        renderPaginationBar();
+      }
+      Utils.error(err.message);
+      reopenModalWithData('Add Payment', '', student, data);
+    });
+  }
+
+  function submitEdit(rowIndex, student, data) {
+    bootstrap.Modal.getInstance(document.getElementById('payModal'))?.hide();
+
+    const idx = cache.findIndex(r => r._row === rowIndex);
+    const previous = idx !== -1 ? cache[idx] : null;
+    if (idx !== -1) {
+      const estimatedPending = Math.max(0, data['Total Course Fee'] - (currentSummary.totalPaid + data['Payment Received']));
+      cache[idx] = Object.assign({}, previous, data, { 'Pending Amount': estimatedPending, _pending: true });
+      renderTable(cache);
+    }
+
+    const payload = Object.assign({ _row: rowIndex }, data);
+    Api.updatePayment(payload).then(saved => {
+      const i = cache.findIndex(r => r._row === rowIndex);
+      if (i !== -1) {
+        cache[i] = Object.assign({}, cache[i], saved, { _pending: false });
+        renderTable(cache);
+      }
+      Utils.success('Payment updated successfully.');
+    }).catch(err => {
+      const i = cache.findIndex(r => r._row === rowIndex);
+      if (i !== -1 && previous) {
+        cache[i] = previous;
+        renderTable(cache);
+      }
+      Utils.error(err.message);
+      reopenModalWithData('Edit Payment', rowIndex, previous || student, data);
+    });
+  }
+
+  function reopenModalWithData(title, rowIndex, student, data) {
+    editingRow = rowIndex ? cache.find(r => r._row === rowIndex) || null : null;
+    document.getElementById('payModalTitle').textContent = title;
+    document.getElementById('payRowHidden').value = rowIndex;
+    populateMethodDropdown();
+    fillForm(Object.assign({}, student, data));
+    if (!rowIndex) document.getElementById('payStudentSearch').readOnly = false; // re-allow picking a different student on Add retry
+    new bootstrap.Modal('#payModal').show();
+    getStudentPaymentSummary(student['Student ID']).then(summary => updatePendingPreview(summary.totalPaid, summary.pendingBefore));
   }
 
   async function deletePayment(rowIndex) {
@@ -241,16 +333,26 @@ const Payments = (() => {
     });
     if (!ok) return;
 
-    Utils.showLoading();
-    try {
-      await Api.deletePayment(rowIndex);
-      Utils.success('Payment deleted.');
-      load();
-    } catch (err) {
-      Utils.error(err.message);
-    } finally {
-      Utils.hideLoading();
+    const idx = cache.findIndex(r => r._row === rowIndex);
+    const previous = idx !== -1 ? cache[idx] : null;
+    if (idx !== -1) {
+      cache.splice(idx, 1);
+      meta = { ...meta, total: Math.max(0, meta.total - 1), totalPages: Math.max(1, Math.ceil(Math.max(0, meta.total - 1) / state.pageSize)) };
+      renderTable(cache);
+      renderPaginationBar();
     }
+
+    Api.deletePayment(rowIndex).then(() => {
+      Utils.success('Payment deleted.');
+    }).catch(err => {
+      if (previous) {
+        cache.splice(idx, 0, previous);
+        meta = { ...meta, total: meta.total + 1, totalPages: Math.max(1, Math.ceil((meta.total + 1) / state.pageSize)) };
+        renderTable(cache);
+        renderPaginationBar();
+      }
+      Utils.error(err.message);
+    });
   }
 
   async function fetchAllForExport() {

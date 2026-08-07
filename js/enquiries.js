@@ -2,11 +2,18 @@
  * enquiries.js
  * Module 1 — Student Enquiries: CRUD table with search, sort, pagination,
  * and CSV/Excel/PDF export.
+ *
+ * Add/Edit/Delete update the on-screen table immediately (optimistic UI)
+ * instead of waiting for the Apps Script round trip, which typically takes
+ * a couple of seconds. The real request still runs in the background;
+ * if it fails, the optimistic change is rolled back and the form/data is
+ * restored so nothing the user typed is lost.
  */
 
 const Enquiries = (() => {
   const state = { page: 1, pageSize: 10, search: '', sortBy: 'CreatedAt', sortDir: 'desc' };
   let cache = [];
+  let meta = { total: 0, page: 1, pageSize: 10, totalPages: 1 };
   let loaded = false;
 
   const exportColumns = [
@@ -25,17 +32,22 @@ const Enquiries = (() => {
     try {
       const result = await Api.getStudents(state);
       cache = result.rows;
-      renderTable(result.rows);
+      meta = { total: result.total, page: result.page, pageSize: result.pageSize, totalPages: result.totalPages };
+      renderTable(cache);
+      renderPaginationBar();
       Utils.wireSortableHeaders(document.getElementById('enqTable'), state, (field, dir) => {
         state.sortBy = field; state.sortDir = dir; load();
       });
-      Utils.renderPagination(document.getElementById('enqPagination'), result, (page) => { state.page = page; load(); });
       loaded = true;
     } catch (err) {
       Utils.error(err.message);
     } finally {
       Utils.hideLoading();
     }
+  }
+
+  function renderPaginationBar() {
+    Utils.renderPagination(document.getElementById('enqPagination'), meta, (page) => { state.page = page; load(); });
   }
 
   function renderTable(rows) {
@@ -45,7 +57,7 @@ const Enquiries = (() => {
       return;
     }
     tbody.innerHTML = rows.map(row => `
-      <tr>
+      <tr class="${row._pending ? 'row-pending' : ''}">
         <td><span class="fw-semibold text-primary">${Utils.escapeHtml(row['Student ID'])}</span></td>
         <td>${Utils.escapeHtml(row['Student Name'])}</td>
         <td>${Utils.formatDate(row['Enquiry Date'])}</td>
@@ -55,8 +67,10 @@ const Enquiries = (() => {
         <td>${Utils.escapeHtml(row['Mobile Number'])}</td>
         <td>${Utils.escapeHtml(row['Gmail'])}</td>
         <td>
-          <button class="btn-sm-icon edit" data-action="edit" data-id="${Utils.escapeHtml(row['Student ID'])}" title="Edit"><i class="fa-solid fa-pen"></i></button>
-          <button class="btn-sm-icon delete" data-action="delete" data-id="${Utils.escapeHtml(row['Student ID'])}" title="Delete"><i class="fa-solid fa-trash"></i></button>
+          ${row._pending ? Utils.pendingIndicatorHtml() : `
+            <button class="btn-sm-icon edit" data-action="edit" data-id="${Utils.escapeHtml(row['Student ID'])}" title="Edit"><i class="fa-solid fa-pen"></i></button>
+            <button class="btn-sm-icon delete" data-action="delete" data-id="${Utils.escapeHtml(row['Student ID'])}" title="Delete"><i class="fa-solid fa-trash"></i></button>
+          `}
         </td>
       </tr>
     `).join('');
@@ -77,9 +91,14 @@ const Enquiries = (() => {
   function openEditModal(studentId) {
     const row = cache.find(r => r['Student ID'] === studentId);
     if (!row) return;
+    fillForm(row);
     document.getElementById('enqModalTitle').textContent = 'Edit Student Enquiry';
     document.getElementById('enqStudentIdHidden').value = row['Student ID'];
-    document.getElementById('enqStudentIdDisplay').value = row['Student ID'];
+    new bootstrap.Modal('#enqModal').show();
+  }
+
+  function fillForm(row) {
+    document.getElementById('enqStudentIdDisplay').value = row['Student ID'] || 'Auto-generated on save';
     document.getElementById('enqDate').value = row['Enquiry Date'];
     document.getElementById('enqName').value = row['Student Name'];
     document.getElementById('enqCourse').value = row['Course'];
@@ -87,56 +106,122 @@ const Enquiries = (() => {
     document.getElementById('enqMobile').value = row['Mobile Number'];
     document.getElementById('enqEmail').value = row['Gmail'];
     document.getElementById('enqReferredBy').value = row['Referred By'] || '';
-    new bootstrap.Modal('#enqModal').show();
   }
 
-  async function handleSubmit(e) {
-    e.preventDefault();
-
-    const mobile = document.getElementById('enqMobile').value.trim();
-    const email = document.getElementById('enqEmail').value.trim();
-
-    if (!Utils.isValidMobile(mobile)) {
-      Utils.error('Please enter a valid 10-digit mobile number.');
-      return;
-    }
-    if (!Utils.isValidEmail(email)) {
-      Utils.error('Please enter a valid email address.');
-      return;
-    }
-
-    const isEdit = !!document.getElementById('enqStudentIdHidden').value;
-    const data = {
+  function readForm() {
+    return {
       'Student Name': document.getElementById('enqName').value.trim(),
       'Enquiry Date': document.getElementById('enqDate').value,
       'Course': document.getElementById('enqCourse').value.trim(),
       'Qualification': document.getElementById('enqQualification').value,
       'Referred By': document.getElementById('enqReferredBy').value.trim(),
-      'Gmail': email,
-      'Mobile Number': mobile
+      'Gmail': document.getElementById('enqEmail').value.trim(),
+      'Mobile Number': document.getElementById('enqMobile').value.trim()
     };
-    if (isEdit) data['Student ID'] = document.getElementById('enqStudentIdHidden').value;
+  }
 
-    const btn = document.getElementById('enqSaveBtn');
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving...';
+  async function handleSubmit(e) {
+    e.preventDefault();
 
-    try {
-      if (isEdit) {
-        await Api.updateStudent(data);
-        Utils.success('Student updated successfully.');
-      } else {
-        await Api.addStudent(data);
-        Utils.success('Student enquiry added successfully.');
-      }
-      bootstrap.Modal.getInstance(document.getElementById('enqModal'))?.hide();
-      load();
-    } catch (err) {
-      Utils.error(err.message);
-    } finally {
-      btn.disabled = false;
-      btn.innerHTML = 'Save';
+    const data = readForm();
+    if (!Utils.isValidMobile(data['Mobile Number'])) {
+      Utils.error('Please enter a valid 10-digit mobile number.');
+      return;
     }
+    if (!Utils.isValidEmail(data['Gmail'])) {
+      Utils.error('Please enter a valid email address.');
+      return;
+    }
+
+    const studentId = document.getElementById('enqStudentIdHidden').value;
+    if (studentId) {
+      submitEdit(studentId, data);
+    } else {
+      submitAdd(data);
+    }
+  }
+
+  /** Adds a placeholder row instantly, saves for real in the background, reconciles on response. */
+  function submitAdd(data) {
+    bootstrap.Modal.getInstance(document.getElementById('enqModal'))?.hide();
+
+    // A brand-new row only belongs at the top of the *current* view when that
+    // view is the default (no search/sort/page override) — otherwise we'd be
+    // splicing it into a filtered or differently-sorted list where it doesn't
+    // actually belong, so just confirm via toast instead of touching the table.
+    const isDefaultView = !state.search && state.page === 1 && state.sortBy === 'CreatedAt' && state.sortDir === 'desc';
+
+    const now = new Date().toISOString();
+    const tempId = Utils.genTempId();
+    const tempRow = Object.assign({ 'Student ID': 'Pending...', 'CreatedAt': now, 'UpdatedAt': now, _pending: true, _tempId: tempId }, data);
+
+    if (isDefaultView) {
+      cache = [tempRow, ...cache].slice(0, state.pageSize);
+      meta = { ...meta, total: meta.total + 1, totalPages: Math.max(1, Math.ceil((meta.total + 1) / state.pageSize)) };
+      renderTable(cache);
+      renderPaginationBar();
+    } else {
+      Utils.info('Saving new student enquiry...');
+    }
+
+    Api.addStudent(data).then(saved => {
+      if (isDefaultView) {
+        const idx = cache.findIndex(r => r._tempId === tempId);
+        if (idx !== -1) {
+          cache[idx] = saved;
+          renderTable(cache);
+        }
+      }
+      Utils.success('Student enquiry added successfully.');
+    }).catch(err => {
+      if (isDefaultView) {
+        const idx = cache.findIndex(r => r._tempId === tempId);
+        if (idx !== -1) cache.splice(idx, 1);
+        meta = { ...meta, total: Math.max(0, meta.total - 1), totalPages: Math.max(1, Math.ceil(Math.max(0, meta.total - 1) / state.pageSize)) };
+        renderTable(cache);
+        renderPaginationBar();
+      }
+      Utils.error(err.message);
+      reopenModalWithData('Add Student Enquiry', '', data);
+    });
+  }
+
+  /** Updates the row instantly, saves for real in the background, rolls back on failure. */
+  function submitEdit(studentId, data) {
+    bootstrap.Modal.getInstance(document.getElementById('enqModal'))?.hide();
+
+    const idx = cache.findIndex(r => r['Student ID'] === studentId);
+    const previous = idx !== -1 ? cache[idx] : null;
+    const optimistic = Object.assign({}, previous, data, { 'Student ID': studentId, UpdatedAt: new Date().toISOString(), _pending: true });
+    if (idx !== -1) {
+      cache[idx] = optimistic;
+      renderTable(cache);
+    }
+
+    const payload = Object.assign({ 'Student ID': studentId }, data);
+    Api.updateStudent(payload).then(saved => {
+      const i = cache.findIndex(r => r['Student ID'] === studentId);
+      if (i !== -1) {
+        cache[i] = Object.assign({}, cache[i], saved, { _pending: false });
+        renderTable(cache);
+      }
+      Utils.success('Student updated successfully.');
+    }).catch(err => {
+      const i = cache.findIndex(r => r['Student ID'] === studentId);
+      if (i !== -1 && previous) {
+        cache[i] = previous;
+        renderTable(cache);
+      }
+      Utils.error(err.message);
+      reopenModalWithData('Edit Student Enquiry', studentId, data);
+    });
+  }
+
+  function reopenModalWithData(title, studentId, data) {
+    document.getElementById('enqModalTitle').textContent = title;
+    document.getElementById('enqStudentIdHidden').value = studentId;
+    fillForm(Object.assign({ 'Student ID': studentId }, data));
+    new bootstrap.Modal('#enqModal').show();
   }
 
   async function deleteStudent(studentId) {
@@ -148,16 +233,26 @@ const Enquiries = (() => {
     });
     if (!ok) return;
 
-    Utils.showLoading();
-    try {
-      await Api.deleteStudent(studentId);
-      Utils.success('Student deleted.');
-      load();
-    } catch (err) {
-      Utils.error(err.message);
-    } finally {
-      Utils.hideLoading();
+    const idx = cache.findIndex(r => r['Student ID'] === studentId);
+    const previous = idx !== -1 ? cache[idx] : null;
+    if (idx !== -1) {
+      cache.splice(idx, 1);
+      meta = { ...meta, total: Math.max(0, meta.total - 1), totalPages: Math.max(1, Math.ceil(Math.max(0, meta.total - 1) / state.pageSize)) };
+      renderTable(cache);
+      renderPaginationBar();
     }
+
+    Api.deleteStudent(studentId).then(() => {
+      Utils.success('Student deleted.');
+    }).catch(err => {
+      if (previous) {
+        cache.splice(idx, 0, previous);
+        meta = { ...meta, total: meta.total + 1, totalPages: Math.max(1, Math.ceil((meta.total + 1) / state.pageSize)) };
+        renderTable(cache);
+        renderPaginationBar();
+      }
+      Utils.error(err.message);
+    });
   }
 
   async function fetchAllForExport() {

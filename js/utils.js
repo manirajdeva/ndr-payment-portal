@@ -113,6 +113,16 @@ const Utils = (() => {
     return div.innerHTML;
   }
 
+  /** Client-side placeholder id for a row added optimistically, before the server confirms it. */
+  function genTempId() {
+    return '_pending_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+  }
+
+  /** Renders the "Saving..." cell shown in a row's Actions column while it's unconfirmed. */
+  function pendingIndicatorHtml() {
+    return `<span class="pending-indicator"><span class="spinner-border spinner-border-sm"></span> Saving...</span>`;
+  }
+
   /** Renders a pagination bar into `container` and wires page clicks to `onPageChange`. */
   function renderPagination(container, { page, totalPages, total, pageSize }, onPageChange) {
     if (!container) return;
@@ -216,7 +226,7 @@ const Utils = (() => {
   return {
     toast, success, error, info, confirmDialog, showLoading, hideLoading,
     todayISO, formatDate, formatDateTime, formatCurrency, timeAgo, debounce,
-    isValidEmail, isValidMobile, escapeHtml, renderPagination, wireSortableHeaders,
+    isValidEmail, isValidMobile, escapeHtml, genTempId, pendingIndicatorHtml, renderPagination, wireSortableHeaders,
     exportCSV, exportExcel, exportPDF
   };
 })();

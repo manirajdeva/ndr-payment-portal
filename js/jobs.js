@@ -3,11 +3,17 @@
  * Module 2 — Job Status: linked to an existing student via search-select,
  * which auto-populates Student Name + Course. CRUD table with search,
  * sort, pagination, and export.
+ *
+ * Add/Edit/Delete update the on-screen table immediately (optimistic UI)
+ * instead of waiting for the Apps Script round trip. The real request still
+ * runs in the background; if it fails, the change is rolled back and the
+ * form is restored so nothing the user picked/typed is lost.
  */
 
 const Jobs = (() => {
   const state = { page: 1, pageSize: 10, search: '', sortBy: 'CreatedAt', sortDir: 'desc' };
   let cache = [];
+  let meta = { total: 0, page: 1, pageSize: 10, totalPages: 1 };
   let selectedStudent = null;
 
   const JOB_STATUS_OPTIONS = [
@@ -41,16 +47,21 @@ const Jobs = (() => {
     try {
       const result = await Api.getJobStatus(state);
       cache = result.rows;
-      renderTable(result.rows);
+      meta = { total: result.total, page: result.page, pageSize: result.pageSize, totalPages: result.totalPages };
+      renderTable(cache);
+      renderPaginationBar();
       Utils.wireSortableHeaders(document.getElementById('jobTable'), state, (field, dir) => {
         state.sortBy = field; state.sortDir = dir; load();
       });
-      Utils.renderPagination(document.getElementById('jobPagination'), result, (page) => { state.page = page; load(); });
     } catch (err) {
       Utils.error(err.message);
     } finally {
       Utils.hideLoading();
     }
+  }
+
+  function renderPaginationBar() {
+    Utils.renderPagination(document.getElementById('jobPagination'), meta, (page) => { state.page = page; load(); });
   }
 
   function statusBadge(status) {
@@ -65,7 +76,7 @@ const Jobs = (() => {
       return;
     }
     tbody.innerHTML = rows.map(row => `
-      <tr>
+      <tr class="${row._pending ? 'row-pending' : ''}">
         <td><span class="fw-semibold text-primary">${Utils.escapeHtml(row['Student ID'])}</span></td>
         <td>${Utils.escapeHtml(row['Student Name'])}</td>
         <td>${Utils.escapeHtml(row['Course'])}</td>
@@ -74,8 +85,10 @@ const Jobs = (() => {
         <td>${Utils.formatDate(row['Office Joining Date'])}</td>
         <td>${Utils.formatDate(row['Job Joining Date'])}</td>
         <td>
-          <button class="btn-sm-icon edit" data-action="edit" data-row="${row._row}" title="Edit"><i class="fa-solid fa-pen"></i></button>
-          <button class="btn-sm-icon delete" data-action="delete" data-row="${row._row}" title="Delete"><i class="fa-solid fa-trash"></i></button>
+          ${row._pending ? Utils.pendingIndicatorHtml() : `
+            <button class="btn-sm-icon edit" data-action="edit" data-row="${row._row}" title="Edit"><i class="fa-solid fa-pen"></i></button>
+            <button class="btn-sm-icon delete" data-action="delete" data-row="${row._row}" title="Delete"><i class="fa-solid fa-trash"></i></button>
+          `}
         </td>
       </tr>
     `).join('');
@@ -105,10 +118,15 @@ const Jobs = (() => {
   function openEditModal(rowIndex) {
     const row = cache.find(r => r._row === rowIndex);
     if (!row) return;
+    populateStatusDropdown();
+    fillForm(row);
     document.getElementById('jobModalTitle').textContent = 'Edit Job Status';
     document.getElementById('jobRowHidden').value = rowIndex;
-    populateStatusDropdown();
+    new bootstrap.Modal('#jobModal').show();
+  }
 
+  /** Fills the form (and student picker) from a row-like object; used for edit and for restoring after a failed save. */
+  function fillForm(row) {
     selectedStudent = { 'Student ID': row['Student ID'], 'Student Name': row['Student Name'], 'Course': row['Course'] };
     document.getElementById('jobStudentSearch').value = `${row['Student ID']} — ${row['Student Name']}`;
     document.getElementById('jobStudentSearch').readOnly = true; // student link can't change on edit
@@ -118,8 +136,15 @@ const Jobs = (() => {
     document.getElementById('jobOrganization').value = row['Organization'] || '';
     document.getElementById('jobOfficeJoiningDate').value = row['Office Joining Date'] || '';
     document.getElementById('jobJoiningDate').value = row['Job Joining Date'] || '';
+  }
 
-    new bootstrap.Modal('#jobModal').show();
+  function readForm() {
+    return {
+      'Job Status': document.getElementById('jobStatus').value,
+      'Organization': document.getElementById('jobOrganization').value.trim(),
+      'Office Joining Date': document.getElementById('jobOfficeJoiningDate').value,
+      'Job Joining Date': document.getElementById('jobJoiningDate').value
+    };
   }
 
   function wireStudentSearch() {
@@ -164,7 +189,7 @@ const Jobs = (() => {
     });
   }
 
-  async function handleSubmit(e) {
+  function handleSubmit(e) {
     e.preventDefault();
     const rowIndex = document.getElementById('jobRowHidden').value;
     const isEdit = !!rowIndex;
@@ -174,35 +199,93 @@ const Jobs = (() => {
       return;
     }
 
-    const data = {
-      'Job Status': document.getElementById('jobStatus').value,
-      'Organization': document.getElementById('jobOrganization').value.trim(),
-      'Office Joining Date': document.getElementById('jobOfficeJoiningDate').value,
-      'Job Joining Date': document.getElementById('jobJoiningDate').value
-    };
-    if (isEdit) data._row = Number(rowIndex);
-    else data['Student ID'] = selectedStudent['Student ID'];
-
-    const btn = document.getElementById('jobSaveBtn');
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving...';
-
-    try {
-      if (isEdit) {
-        await Api.updateJobStatus(data);
-        Utils.success('Job status updated successfully.');
-      } else {
-        await Api.saveJobStatus(data);
-        Utils.success('Job status added successfully.');
-      }
-      bootstrap.Modal.getInstance(document.getElementById('jobModal'))?.hide();
-      load();
-    } catch (err) {
-      Utils.error(err.message);
-    } finally {
-      btn.disabled = false;
-      btn.innerHTML = 'Save';
+    const data = readForm();
+    if (isEdit) {
+      submitEdit(Number(rowIndex), data);
+    } else {
+      submitAdd(selectedStudent, data);
     }
+  }
+
+  function submitAdd(student, data) {
+    bootstrap.Modal.getInstance(document.getElementById('jobModal'))?.hide();
+
+    const isDefaultView = !state.search && state.page === 1 && state.sortBy === 'CreatedAt' && state.sortDir === 'desc';
+    const now = new Date().toISOString();
+    const tempId = Utils.genTempId();
+    const tempRow = Object.assign({
+      'Student ID': student['Student ID'], 'Student Name': student['Student Name'], 'Course': student['Course'],
+      'CreatedAt': now, 'UpdatedAt': now, _pending: true, _tempId: tempId
+    }, data);
+
+    if (isDefaultView) {
+      cache = [tempRow, ...cache].slice(0, state.pageSize);
+      meta = { ...meta, total: meta.total + 1, totalPages: Math.max(1, Math.ceil((meta.total + 1) / state.pageSize)) };
+      renderTable(cache);
+      renderPaginationBar();
+    } else {
+      Utils.info('Saving job status...');
+    }
+
+    const payload = Object.assign({ 'Student ID': student['Student ID'] }, data);
+    Api.saveJobStatus(payload).then(saved => {
+      if (isDefaultView) {
+        const idx = cache.findIndex(r => r._tempId === tempId);
+        if (idx !== -1) {
+          cache[idx] = Object.assign({ 'Student ID': student['Student ID'], 'Student Name': student['Student Name'], 'Course': student['Course'] }, saved);
+          renderTable(cache);
+        }
+      }
+      Utils.success('Job status added successfully.');
+    }).catch(err => {
+      if (isDefaultView) {
+        const idx = cache.findIndex(r => r._tempId === tempId);
+        if (idx !== -1) cache.splice(idx, 1);
+        meta = { ...meta, total: Math.max(0, meta.total - 1), totalPages: Math.max(1, Math.ceil(Math.max(0, meta.total - 1) / state.pageSize)) };
+        renderTable(cache);
+        renderPaginationBar();
+      }
+      Utils.error(err.message);
+      reopenModalWithData('Add Job Status', '', student, data);
+    });
+  }
+
+  function submitEdit(rowIndex, data) {
+    bootstrap.Modal.getInstance(document.getElementById('jobModal'))?.hide();
+
+    const idx = cache.findIndex(r => r._row === rowIndex);
+    const previous = idx !== -1 ? cache[idx] : null;
+    if (idx !== -1) {
+      cache[idx] = Object.assign({}, previous, data, { UpdatedAt: new Date().toISOString(), _pending: true });
+      renderTable(cache);
+    }
+
+    const payload = Object.assign({ _row: rowIndex }, data);
+    Api.updateJobStatus(payload).then(saved => {
+      const i = cache.findIndex(r => r._row === rowIndex);
+      if (i !== -1) {
+        cache[i] = Object.assign({}, cache[i], saved, { _pending: false });
+        renderTable(cache);
+      }
+      Utils.success('Job status updated successfully.');
+    }).catch(err => {
+      const i = cache.findIndex(r => r._row === rowIndex);
+      if (i !== -1 && previous) {
+        cache[i] = previous;
+        renderTable(cache);
+      }
+      Utils.error(err.message);
+      reopenModalWithData('Edit Job Status', rowIndex, previous || {}, data);
+    });
+  }
+
+  function reopenModalWithData(title, rowIndex, student, data) {
+    document.getElementById('jobModalTitle').textContent = title;
+    document.getElementById('jobRowHidden').value = rowIndex;
+    populateStatusDropdown();
+    fillForm(Object.assign({}, student, data));
+    if (!rowIndex) document.getElementById('jobStudentSearch').readOnly = false; // re-allow picking a different student on Add retry
+    new bootstrap.Modal('#jobModal').show();
   }
 
   async function deleteJob(rowIndex) {
@@ -214,16 +297,26 @@ const Jobs = (() => {
     });
     if (!ok) return;
 
-    Utils.showLoading();
-    try {
-      await Api.deleteJobStatus(rowIndex);
-      Utils.success('Record deleted.');
-      load();
-    } catch (err) {
-      Utils.error(err.message);
-    } finally {
-      Utils.hideLoading();
+    const idx = cache.findIndex(r => r._row === rowIndex);
+    const previous = idx !== -1 ? cache[idx] : null;
+    if (idx !== -1) {
+      cache.splice(idx, 1);
+      meta = { ...meta, total: Math.max(0, meta.total - 1), totalPages: Math.max(1, Math.ceil(Math.max(0, meta.total - 1) / state.pageSize)) };
+      renderTable(cache);
+      renderPaginationBar();
     }
+
+    Api.deleteJobStatus(rowIndex).then(() => {
+      Utils.success('Record deleted.');
+    }).catch(err => {
+      if (previous) {
+        cache.splice(idx, 0, previous);
+        meta = { ...meta, total: meta.total + 1, totalPages: Math.max(1, Math.ceil((meta.total + 1) / state.pageSize)) };
+        renderTable(cache);
+        renderPaginationBar();
+      }
+      Utils.error(err.message);
+    });
   }
 
   async function fetchAllForExport() {
