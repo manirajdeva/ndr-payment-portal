@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard — NDR EDTECH Student Portal</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎓</text></svg>">
+
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet">
+<link href="css/style.css" rel="stylesheet">
+</head>
+<body>
+
+<div class="app-shell">
+
+  <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <div class="logo-box"><i class="fa-solid fa-graduation-cap"></i></div>
+      <div class="brand-text">
+        <strong>NDR EDTECH</strong>
+        <span>Student Portal</span>
+      </div>
+    </div>
+    <nav class="sidebar-nav" id="sidebarNav">
+      <a class="nav-link active" data-section="dashboard"><i class="fa-solid fa-gauge-high"></i> Dashboard</a>
+      <a class="nav-link" data-section="enquiries"><i class="fa-solid fa-user-plus"></i> Student Enquiries</a>
+      <a class="nav-link" data-section="jobs"><i class="fa-solid fa-briefcase"></i> Job Status</a>
+      <a class="nav-link" data-section="payments"><i class="fa-solid fa-indian-rupee-sign"></i> Payments</a>
+      <a class="nav-link" data-section="reports"><i class="fa-solid fa-chart-column"></i> Reports</a>
+      <a class="nav-link" data-section="settings"><i class="fa-solid fa-gear"></i> Settings</a>
+    </nav>
+    <div class="sidebar-footer">
+      <a class="nav-link" id="logoutBtn"><i class="fa-solid fa-right-from-bracket"></i> Logout</a>
+    </div>
+  </aside>
+
+  <div class="main-content">
+    <header class="topbar">
+      <div class="d-flex align-items-center gap-3">
+        <button class="sidebar-toggle-btn" id="sidebarToggle"><i class="fa-solid fa-bars"></i></button>
+        <div class="page-title">
+          <span id="pageTitle">Dashboard</span>
+          <small id="pageSubtitle">Overview of your institute's performance</small>
+        </div>
+      </div>
+      <div class="d-flex align-items-center gap-2">
+        <button class="theme-toggle-btn" id="themeToggle" title="Toggle dark mode"><i class="fa-solid fa-moon"></i></button>
+        <div class="d-flex align-items-center gap-2 ps-2">
+          <div class="avatar-circle" id="userInitial">A</div>
+          <span class="d-none d-sm-inline fw-semibold small" id="userName">Admin</span>
+        </div>
+      </div>
+    </header>
+
+    <main class="content-area">
+
+      <!-- ===================== DASHBOARD ===================== -->
+      <section class="app-section active" id="section-dashboard">
+        <div class="row g-3 mb-1" id="statCardsRow"></div>
+
+        <div class="row g-3 mt-1">
+          <div class="col-lg-7">
+            <div class="card chart-card section-card">
+              <div class="section-title">Monthly Admissions</div>
+              <div class="text-muted small mb-2">New enquiries over the last 6 months</div>
+              <canvas id="admissionsChart"></canvas>
+            </div>
+          </div>
+          <div class="col-lg-5">
+            <div class="card chart-card section-card">
+              <div class="section-title">Placement Statistics</div>
+              <div class="text-muted small mb-2">Breakdown by job status</div>
+              <canvas id="placementChart"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <div class="row g-3 mt-1">
+          <div class="col-lg-7">
+            <div class="card chart-card section-card">
+              <div class="section-title">Monthly Revenue</div>
+              <div class="text-muted small mb-2">Payments received over the last 6 months</div>
+              <canvas id="revenueChart"></canvas>
+            </div>
+          </div>
+          <div class="col-lg-5">
+            <div class="card section-card">
+              <div class="section-title">Recent Activities</div>
+              <div class="text-muted small mb-2">Latest updates across the portal</div>
+              <div id="recentActivitiesList" style="max-height: 300px; overflow-y:auto;"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================== ENQUIRIES ===================== -->
+      <section class="app-section" id="section-enquiries">
+        <div class="card section-card">
+          <div class="table-toolbar">
+            <div class="d-flex gap-2 flex-wrap">
+              <input type="text" class="form-control" id="enqSearch" placeholder="Search by name, mobile, email or ID..." style="min-width:260px;">
+            </div>
+            <div class="d-flex gap-2 flex-wrap">
+              <button class="btn btn-outline-primary btn-sm" id="enqExportCsv"><i class="fa-solid fa-file-csv me-1"></i>CSV</button>
+              <button class="btn btn-outline-primary btn-sm" id="enqExportExcel"><i class="fa-solid fa-file-excel me-1"></i>Excel</button>
+              <button class="btn btn-outline-primary btn-sm" id="enqExportPdf"><i class="fa-solid fa-file-pdf me-1"></i>PDF</button>
+              <button class="btn btn-primary btn-sm" id="enqAddBtn"><i class="fa-solid fa-plus me-1"></i>Add Student</button>
+            </div>
+          </div>
+          <div class="table-responsive-wrap">
+            <table class="data-table" id="enqTable">
+              <thead>
+                <tr>
+                  <th data-sort="Student ID">Student ID</th>
+                  <th data-sort="Student Name">Name</th>
+                  <th data-sort="Enquiry Date">Enquiry Date</th>
+                  <th data-sort="Course">Course</th>
+                  <th>Referred By</th>
+                  <th>Mobile</th>
+                  <th>Email</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="enqTableBody"></tbody>
+            </table>
+          </div>
+          <div class="pagination-bar" id="enqPagination"></div>
+        </div>
+      </section>
+
+      <!-- ===================== JOB STATUS ===================== -->
+      <section class="app-section" id="section-jobs">
+        <div class="card section-card">
+          <div class="table-toolbar">
+            <div class="d-flex gap-2 flex-wrap">
+              <input type="text" class="form-control" id="jobSearch" placeholder="Search by student, organization or status..." style="min-width:260px;">
+            </div>
+            <div class="d-flex gap-2 flex-wrap">
+              <button class="btn btn-outline-primary btn-sm" id="jobExportCsv"><i class="fa-solid fa-file-csv me-1"></i>CSV</button>
+              <button class="btn btn-outline-primary btn-sm" id="jobExportExcel"><i class="fa-solid fa-file-excel me-1"></i>Excel</button>
+              <button class="btn btn-outline-primary btn-sm" id="jobExportPdf"><i class="fa-solid fa-file-pdf me-1"></i>PDF</button>
+              <button class="btn btn-primary btn-sm" id="jobAddBtn"><i class="fa-solid fa-plus me-1"></i>Add Job Status</button>
+            </div>
+          </div>
+          <div class="table-responsive-wrap">
+            <table class="data-table" id="jobTable">
+              <thead>
+                <tr>
+                  <th data-sort="Student ID">Student ID</th>
+                  <th data-sort="Student Name">Name</th>
+                  <th data-sort="Course">Course</th>
+                  <th data-sort="Job Status">Status</th>
+                  <th>Organization</th>
+                  <th>Office Joining</th>
+                  <th>Job Joining</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="jobTableBody"></tbody>
+            </table>
+          </div>
+          <div class="pagination-bar" id="jobPagination"></div>
+        </div>
+      </section>
+
+      <!-- ===================== PAYMENTS ===================== -->
+      <section class="app-section" id="section-payments">
+        <div class="card section-card">
+          <div class="table-toolbar">
+            <div class="d-flex gap-2 flex-wrap">
+              <input type="text" class="form-control" id="paySearch" placeholder="Search by student, payment ID or method..." style="min-width:260px;">
+            </div>
+            <div class="d-flex gap-2 flex-wrap">
+              <button class="btn btn-outline-primary btn-sm" id="payExportCsv"><i class="fa-solid fa-file-csv me-1"></i>CSV</button>
+              <button class="btn btn-outline-primary btn-sm" id="payExportExcel"><i class="fa-solid fa-file-excel me-1"></i>Excel</button>
+              <button class="btn btn-outline-primary btn-sm" id="payExportPdf"><i class="fa-solid fa-file-pdf me-1"></i>PDF</button>
+              <button class="btn btn-primary btn-sm" id="payAddBtn"><i class="fa-solid fa-plus me-1"></i>Add Payment</button>
+            </div>
+          </div>
+          <div class="table-responsive-wrap">
+            <table class="data-table" id="payTable">
+              <thead>
+                <tr>
+                  <th data-sort="Payment ID">Payment ID</th>
+                  <th data-sort="Student ID">Student ID</th>
+                  <th data-sort="Student Name">Name</th>
+                  <th data-sort="Total Course Fee">Total Fee</th>
+                  <th data-sort="Payment Received">Received</th>
+                  <th data-sort="Pending Amount">Pending</th>
+                  <th>Method</th>
+                  <th data-sort="Payment Date">Date</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="payTableBody"></tbody>
+            </table>
+          </div>
+          <div class="pagination-bar" id="payPagination"></div>
+        </div>
+      </section>
+
+      <!-- ===================== REPORTS ===================== -->
+      <section class="app-section" id="section-reports">
+        <div class="card section-card">
+          <div class="section-title mb-3">Generate Report</div>
+          <form id="reportFilterForm" class="row g-3">
+            <div class="col-md-3">
+              <label class="form-label">From Date</label>
+              <input type="date" class="form-control" id="rptDateFrom">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">To Date</label>
+              <input type="date" class="form-control" id="rptDateTo">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Course</label>
+              <input type="text" class="form-control" id="rptCourse" placeholder="e.g. Full Stack Development">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Organization</label>
+              <input type="text" class="form-control" id="rptOrganization" placeholder="e.g. Infosys">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Job Status</label>
+              <select class="form-select" id="rptJobStatus">
+                <option value="">All</option>
+              </select>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Payment Status</label>
+              <select class="form-select" id="rptPaymentStatus">
+                <option value="">All</option>
+                <option>Paid</option>
+                <option>Partial</option>
+                <option>Pending</option>
+                <option>No Payment</option>
+              </select>
+            </div>
+            <div class="col-md-6 d-flex align-items-end gap-2">
+              <button type="submit" class="btn btn-primary"><i class="fa-solid fa-magnifying-glass me-1"></i>Generate Report</button>
+              <button type="button" class="btn btn-outline-secondary" id="rptResetBtn">Reset</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="card section-card">
+          <div class="table-toolbar">
+            <div class="section-title mb-0">Results <span class="badge bg-primary" id="rptCount">0</span></div>
+            <div class="d-flex gap-2 flex-wrap">
+              <button class="btn btn-outline-primary btn-sm" id="rptExportCsv"><i class="fa-solid fa-file-csv me-1"></i>CSV</button>
+              <button class="btn btn-outline-primary btn-sm" id="rptExportExcel"><i class="fa-solid fa-file-excel me-1"></i>Excel</button>
+              <button class="btn btn-outline-primary btn-sm" id="rptExportPdf"><i class="fa-solid fa-file-pdf me-1"></i>PDF</button>
+            </div>
+          </div>
+          <div class="table-responsive-wrap">
+            <table class="data-table" id="rptTable">
+              <thead>
+                <tr>
+                  <th>Student ID</th><th>Name</th><th>Enquiry Date</th><th>Course</th>
+                  <th>Mobile</th><th>Job Status</th><th>Organization</th>
+                  <th>Total Fee</th><th>Received</th><th>Pending</th><th>Payment Status</th>
+                </tr>
+              </thead>
+              <tbody id="rptTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================== SETTINGS ===================== -->
+      <section class="app-section" id="section-settings">
+        <div class="row g-3">
+          <div class="col-lg-6">
+            <div class="card section-card">
+              <div class="section-title">Account</div>
+              <p class="text-muted small">You're logged in as an administrator.</p>
+              <table class="table table-sm">
+                <tr><td class="text-muted">Username</td><td class="fw-semibold" id="settingsUsername">-</td></tr>
+                <tr><td class="text-muted">Session expires</td><td class="fw-semibold" id="settingsExpiry">-</td></tr>
+              </table>
+              <div class="alert alert-info small mb-0">
+                To change the admin password, open the Apps Script project, edit the
+                <code>changeAdminPassword()</code> function in <code>Auth.gs</code> with the new
+                password, and run it once. This keeps credentials out of the frontend entirely.
+              </div>
+            </div>
+          </div>
+          <div class="col-lg-6">
+            <div class="card section-card">
+              <div class="section-title">Appearance</div>
+              <p class="text-muted small">Choose how the portal looks on this device.</p>
+              <div class="btn-group" role="group">
+                <button class="btn btn-outline-primary" id="settingsLightBtn"><i class="fa-solid fa-sun me-1"></i>Light</button>
+                <button class="btn btn-outline-primary" id="settingsDarkBtn"><i class="fa-solid fa-moon me-1"></i>Dark</button>
+              </div>
+            </div>
+            <div class="card section-card">
+              <div class="section-title">About</div>
+              <p class="text-muted small mb-0">NDR EDTECH Student Management Portal v1.0<br>Frontend hosted on GitHub Pages · Backend on Google Apps Script · Data in Google Sheets.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+</div>
+
+<!-- ===================== MODALS ===================== -->
+
+<div class="modal fade" id="enqModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="enqModalTitle">Add Student Enquiry</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form id="enqForm">
+        <div class="modal-body">
+          <input type="hidden" id="enqStudentIdHidden">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Student ID</label>
+              <input type="text" class="form-control" id="enqStudentIdDisplay" readonly placeholder="Auto-generated">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Enquiry Date <span class="text-danger">*</span></label>
+              <input type="date" class="form-control" id="enqDate" required>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Student Name <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" id="enqName" required>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Course <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" id="enqCourse" required placeholder="e.g. Full Stack Development">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Mobile Number <span class="text-danger">*</span></label>
+              <input type="tel" class="form-control" id="enqMobile" required maxlength="10" placeholder="10-digit mobile number">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Email (Gmail) <span class="text-danger">*</span></label>
+              <input type="email" class="form-control" id="enqEmail" required>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Referred By</label>
+              <input type="text" class="form-control" id="enqReferredBy">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="enqSaveBtn">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="jobModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="jobModalTitle">Add Job Status</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form id="jobForm">
+        <div class="modal-body">
+          <input type="hidden" id="jobRowHidden">
+          <div class="row g-3">
+            <div class="col-md-6 position-relative">
+              <label class="form-label">Student ID <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" id="jobStudentSearch" placeholder="Search by name, ID or mobile..." autocomplete="off">
+              <div class="list-group position-absolute w-100" id="jobStudentResults" style="z-index:1060; max-height:220px; overflow-y:auto;"></div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Student Name</label>
+              <input type="text" class="form-control" id="jobStudentName" readonly>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Course</label>
+              <input type="text" class="form-control" id="jobCourse" readonly>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Job Status <span class="text-danger">*</span></label>
+              <select class="form-select" id="jobStatus" required></select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Organization</label>
+              <input type="text" class="form-control" id="jobOrganization">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Office Joining Date</label>
+              <input type="date" class="form-control" id="jobOfficeJoiningDate">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Job Joining Date</label>
+              <input type="date" class="form-control" id="jobJoiningDate">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="jobSaveBtn">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="payModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="payModalTitle">Add Payment</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form id="payForm">
+        <div class="modal-body">
+          <input type="hidden" id="payRowHidden">
+          <div class="row g-3">
+            <div class="col-md-6 position-relative">
+              <label class="form-label">Student ID <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" id="payStudentSearch" placeholder="Search by name, ID or mobile..." autocomplete="off">
+              <div class="list-group position-absolute w-100" id="payStudentResults" style="z-index:1060; max-height:220px; overflow-y:auto;"></div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Student Name</label>
+              <input type="text" class="form-control" id="payStudentName" readonly>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Job Offer Date</label>
+              <input type="date" class="form-control" id="payJobOfferDate">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Total Course Fee <span class="text-danger">*</span></label>
+              <input type="number" class="form-control" id="payTotalFee" min="0" step="0.01" required>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Payment Received <span class="text-danger">*</span></label>
+              <input type="number" class="form-control" id="payReceived" min="0.01" step="0.01" required>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Payment Method <span class="text-danger">*</span></label>
+              <select class="form-select" id="payMethod" required></select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Payment Date</label>
+              <input type="date" class="form-control" id="payDate">
+            </div>
+            <div class="col-md-6 d-flex align-items-end">
+              <div class="alert alert-info py-2 px-3 mb-0 small w-100" id="payPendingPreview">
+                Already paid: ₹0 &nbsp;·&nbsp; Pending before this payment: ₹0
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="paySaveBtn">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+
+<script src="js/utils.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/api.js"></script>
+<script src="js/dashboard.js"></script>
+<script src="js/enquiries.js"></script>
+<script src="js/jobs.js"></script>
+<script src="js/payments.js"></script>
+<script src="js/reports.js"></script>
+</body>
+</html>
