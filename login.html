@@ -21,6 +21,9 @@
     <div id="expiredNotice" class="alert alert-warning py-2 small d-none">
       Your session expired. Please log in again.
     </div>
+    <div id="mockBackendNotice" class="alert alert-info py-2 small d-none">
+      <i class="fa-solid fa-flask me-1"></i> Using the local mock backend — data won't be saved to Google Sheets. Add <code>?api=live</code> to the URL to use the real backend.
+    </div>
 
     <form id="loginForm" novalidate>
       <div class="mb-3">
@@ -61,6 +64,10 @@
 
   if (new URLSearchParams(location.search).get('expired') === '1') {
     document.getElementById('expiredNotice').classList.remove('d-none');
+  }
+
+  if (typeof useMockApi !== 'undefined' && useMockApi) {
+    document.getElementById('mockBackendNotice').classList.remove('d-none');
   }
 
   document.getElementById('togglePassword').addEventListener('click', () => {

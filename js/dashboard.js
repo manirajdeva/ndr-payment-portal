@@ -98,6 +98,16 @@ const App = (() => {
     if (session) {
       document.getElementById('settingsExpiry').textContent = new Date(session.expiresAt).toLocaleString('en-IN');
     }
+
+    if (typeof useMockApi !== 'undefined' && useMockApi) {
+      document.getElementById('mockBackendBanner')?.classList.remove('d-none');
+    }
+    const backendField = document.getElementById('settingsBackend');
+    if (backendField) {
+      backendField.textContent = (typeof useMockApi !== 'undefined' && useMockApi)
+        ? 'Local mock (data not saved to Google Sheets)'
+        : 'Real Google Sheets backend';
+    }
   }
 
   return { onSectionActivate, showSection, wireShell };

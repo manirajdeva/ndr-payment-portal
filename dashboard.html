@@ -55,6 +55,10 @@
       </div>
     </header>
 
+    <div id="mockBackendBanner" class="alert alert-info d-none rounded-0 mb-0 py-2 px-4 text-center small">
+      <i class="fa-solid fa-flask me-1"></i> You're using the local mock backend — nothing you add here is saved to Google Sheets. Add <code>?api=live</code> to the URL to switch to the real backend.
+    </div>
+
     <main class="content-area">
 
       <!-- ===================== DASHBOARD ===================== -->
@@ -281,6 +285,7 @@
               <table class="table table-sm">
                 <tr><td class="text-muted">Username</td><td class="fw-semibold" id="settingsUsername">-</td></tr>
                 <tr><td class="text-muted">Session expires</td><td class="fw-semibold" id="settingsExpiry">-</td></tr>
+                <tr><td class="text-muted">Backend</td><td class="fw-semibold" id="settingsBackend">-</td></tr>
               </table>
               <div class="alert alert-info small mb-0">
                 To change the admin password, open the Apps Script project, edit the

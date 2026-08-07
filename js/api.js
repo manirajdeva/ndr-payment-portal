@@ -12,14 +12,37 @@
  * On localhost/127.0.0.1 this automatically points at the zero-dependency
  * mock API in mock-server/server.js instead, so the whole app can be
  * clicked through without a Google account — see README.md "Local testing".
+ * Data added while pointed at the mock API lives only in that Node
+ * process's memory — it is NOT written to the real Google Sheet.
+ *
+ * To test the real Google Sheets backend from localhost (instead of the
+ * mock), visit the page once with ?api=live in the URL, e.g.
+ * http://localhost:5500/login.html?api=live — this is remembered on this
+ * device until you visit with ?api=mock again. A console message on every
+ * load states which backend is currently active.
  */
 
 const PRODUCTION_APP_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxXPv0ylbo6CRK2lt3xLahnDauEOoBRUr8jvdSujEMEh5EWAemBNCS-8JINudN86Cj0/exec';
 const LOCAL_MOCK_API_URL = 'http://localhost:3001/exec';
 
-const APP_SCRIPT_URL = ['localhost', '127.0.0.1'].includes(location.hostname)
-  ? LOCAL_MOCK_API_URL
-  : PRODUCTION_APP_SCRIPT_URL;
+const FORCE_API_STORAGE_KEY = 'ndr_force_api';
+const requestedApiMode = new URLSearchParams(location.search).get('api');
+if (requestedApiMode === 'live' || requestedApiMode === 'mock') {
+  localStorage.setItem(FORCE_API_STORAGE_KEY, requestedApiMode);
+}
+const forcedApiMode = localStorage.getItem(FORCE_API_STORAGE_KEY);
+const isLocalHost = ['localhost', '127.0.0.1'].includes(location.hostname);
+const useMockApi = isLocalHost && forcedApiMode !== 'live';
+
+const APP_SCRIPT_URL = useMockApi ? LOCAL_MOCK_API_URL : PRODUCTION_APP_SCRIPT_URL;
+
+if (isLocalHost) {
+  console.info(
+    useMockApi
+      ? '[NDR EDTECH] Using the LOCAL MOCK backend — data is in-memory only and will NOT appear in Google Sheets. Add ?api=live to the URL to switch to the real backend.'
+      : '[NDR EDTECH] Using the REAL Google Sheets backend (forced via ?api=live). Add ?api=mock to switch back to the local mock.'
+  );
+}
 
 const Api = (() => {
   async function call(action, params = {}) {
