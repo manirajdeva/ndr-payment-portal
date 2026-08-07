@@ -129,12 +129,34 @@ Because everything is static HTML/CSS/JS with no build step, no further configur
 - **Reports** — filter by date range, course, job status, payment status, or organization, then export the results to CSV, Excel, or PDF. The same export options are available directly on each module's table.
 - **Settings** — light/dark theme toggle and account info. Password changes are done from the Apps Script editor (see 2.2) rather than the UI, so credentials never pass through the frontend.
 
-## 5. Local development
+## 5. Local testing (no Google account needed)
 
-Since this is static HTML/JS, you can preview it with any static file server, e.g.:
+`mock-server/` contains a zero-dependency Node stand-in for the Apps Script
+backend — same action names, same request/response envelope, same
+validation rules (duplicate mobile/email, 10-digit mobile, overpayment,
+negative-pending guard, etc.) as `apps-script/*.gs`, but backed by an
+in-memory store instead of Google Sheets. `js/api.js` automatically points
+at it whenever the page is served from `localhost`/`127.0.0.1`, so no code
+changes are needed to switch between local testing and production.
+
+Run two terminals from the project root:
 
 ```
-npx serve .
+node mock-server/server.js          # API on http://localhost:3001, pre-seeded with sample data
+node mock-server/static-server.js   # frontend on http://localhost:5500
 ```
 
-Then open the printed local URL. Make sure `APP_SCRIPT_URL` in `js/api.js` is already set — the Apps Script Web App works the same whether it's called from `localhost` or GitHub Pages.
+Open **http://localhost:5500** and log in with:
+
+- **Username:** `admin`
+- **Password:** `Admin@123`
+
+Everything works end-to-end — dashboard charts, CRUD on all three modules,
+search/sort/pagination, reports, and CSV/Excel/PDF export — against 12
+seeded students with realistic enquiries, job statuses, and payments spread
+across the last 6 months. Data resets whenever you restart
+`mock-server/server.js` (it's in-memory only).
+
+When you're ready for production: set `PRODUCTION_APP_SCRIPT_URL` in
+`js/api.js` to your real deployed Web App URL (section 3.1) and deploy to
+GitHub Pages — the mock server is never used outside of `localhost`.

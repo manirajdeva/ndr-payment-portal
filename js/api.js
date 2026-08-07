@@ -2,15 +2,24 @@
  * api.js
  * Single point of contact with the Google Apps Script Web App.
  *
- * IMPORTANT: replace APP_SCRIPT_URL below with your deployed Web App URL
- * (Deploy > New deployment > Web app). See README.md for full steps.
+ * IMPORTANT: replace PRODUCTION_APP_SCRIPT_URL below with your deployed Web
+ * App URL (Deploy > New deployment > Web app). See README.md for full steps.
  *
  * Every request is sent as POST with a text/plain body (a JSON string).
  * This keeps the request a CORS "simple request" so the browser does not
  * send an OPTIONS preflight, which Apps Script web apps cannot answer.
+ *
+ * On localhost/127.0.0.1 this automatically points at the zero-dependency
+ * mock API in mock-server/server.js instead, so the whole app can be
+ * clicked through without a Google account — see README.md "Local testing".
  */
 
-const APP_SCRIPT_URL = 'https://script.google.com/macros/s/REPLACE_WITH_YOUR_DEPLOYMENT_ID/exec';
+const PRODUCTION_APP_SCRIPT_URL = 'https://script.google.com/macros/s/REPLACE_WITH_YOUR_DEPLOYMENT_ID/exec';
+const LOCAL_MOCK_API_URL = 'http://localhost:3001/exec';
+
+const APP_SCRIPT_URL = ['localhost', '127.0.0.1'].includes(location.hostname)
+  ? LOCAL_MOCK_API_URL
+  : PRODUCTION_APP_SCRIPT_URL;
 
 const Api = (() => {
   async function call(action, params = {}) {
