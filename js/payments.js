@@ -11,7 +11,7 @@
  */
 
 const Payments = (() => {
-  const state = { page: 1, pageSize: 10, search: '', sortBy: 'CreatedAt', sortDir: 'desc' };
+  const state = { page: 1, pageSize: 10, search: '', course: '', dateFrom: '', dateTo: '', sortBy: 'CreatedAt', sortDir: 'desc' };
   let cache = [];
   let meta = { total: 0, page: 1, pageSize: 10, totalPages: 1 };
   let selectedStudent = null;
@@ -23,6 +23,7 @@ const Payments = (() => {
     { key: 'Payment ID', label: 'Payment ID' },
     { key: 'Student ID', label: 'Student ID' },
     { key: 'Student Name', label: 'Student Name' },
+    { key: 'Course', label: 'Course' },
     { key: 'Job Offer Date', label: 'Job Offer Date' },
     { key: 'Total Course Fee', label: 'Total Course Fee' },
     { key: 'Payment Received', label: 'Payment Received' },
@@ -60,7 +61,7 @@ const Payments = (() => {
   function renderTable(rows) {
     const tbody = document.getElementById('payTableBody');
     if (!rows.length) {
-      tbody.innerHTML = `<tr><td colspan="9" class="text-center text-muted py-4">No payment records found.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="10" class="text-center text-muted py-4">No payment records found.</td></tr>`;
       return;
     }
     tbody.innerHTML = rows.map(row => {
@@ -71,6 +72,7 @@ const Payments = (() => {
         <td>${Utils.escapeHtml(row['Payment ID'])}</td>
         <td><span class="fw-semibold text-primary">${Utils.escapeHtml(row['Student ID'])}</span></td>
         <td>${Utils.escapeHtml(row['Student Name'])}</td>
+        <td>${Utils.escapeHtml(row['Course'])}</td>
         <td>${Utils.formatCurrency(row['Total Course Fee'])}</td>
         <td>${Utils.formatCurrency(row['Payment Received'])}</td>
         <td class="${pendingClass} fw-semibold">${Utils.formatCurrency(pending)}</td>
@@ -94,6 +96,7 @@ const Payments = (() => {
     document.getElementById('payStudentSearch').value = '';
     document.getElementById('payStudentSearch').readOnly = false;
     document.getElementById('payStudentName').value = '';
+    document.getElementById('payCourse').value = '';
     document.getElementById('payStudentResults').innerHTML = '';
     updatePendingPreview(0, 0);
   }
@@ -147,10 +150,11 @@ const Payments = (() => {
 
   /** Fills the form (and student picker) from a row-like object; used for edit and for restoring after a failed save. */
   function fillForm(row) {
-    selectedStudent = { 'Student ID': row['Student ID'], 'Student Name': row['Student Name'] };
+    selectedStudent = { 'Student ID': row['Student ID'], 'Student Name': row['Student Name'], 'Course': row['Course'] };
     document.getElementById('payStudentSearch').value = `${row['Student ID']} — ${row['Student Name']}`;
     document.getElementById('payStudentSearch').readOnly = true;
     document.getElementById('payStudentName').value = row['Student Name'];
+    document.getElementById('payCourse').value = row['Course'] || '';
     document.getElementById('payJobOfferDate').value = row['Job Offer Date'] || '';
     document.getElementById('payTotalFee').value = row['Total Course Fee'];
     document.getElementById('payReceived').value = row['Payment Received'];
@@ -176,6 +180,7 @@ const Payments = (() => {
       const query = e.target.value.trim();
       selectedStudent = null;
       document.getElementById('payStudentName').value = '';
+      document.getElementById('payCourse').value = '';
       updatePendingPreview(0, 0);
       if (!query) { results.innerHTML = ''; return; }
 
@@ -196,6 +201,7 @@ const Payments = (() => {
             selectedStudent = student;
             input.value = `${student['Student ID']} — ${student['Student Name']}`;
             document.getElementById('payStudentName').value = student['Student Name'];
+            document.getElementById('payCourse').value = student['Course'] || '';
             results.innerHTML = '';
 
             const summary = await getStudentPaymentSummary(student['Student ID']);
@@ -247,7 +253,7 @@ const Payments = (() => {
     const estimatedPending = Math.max(0, data['Total Course Fee'] - (currentSummary.totalPaid + data['Payment Received']));
 
     const tempRow = Object.assign({
-      'Payment ID': 'Pending...', 'Student ID': student['Student ID'], 'Student Name': student['Student Name'],
+      'Payment ID': 'Pending...', 'Student ID': student['Student ID'], 'Student Name': student['Student Name'], 'Course': student['Course'],
       'Pending Amount': estimatedPending, 'CreatedAt': now, _pending: true, _tempId: tempId
     }, data);
 
@@ -356,7 +362,10 @@ const Payments = (() => {
   }
 
   async function fetchAllForExport() {
-    const result = await Api.getPayments({ search: state.search, sortBy: state.sortBy, sortDir: state.sortDir, page: 1, pageSize: 100000 });
+    const result = await Api.getPayments({
+      search: state.search, course: state.course, dateFrom: state.dateFrom, dateTo: state.dateTo,
+      sortBy: state.sortBy, sortDir: state.sortDir, page: 1, pageSize: 100000
+    });
     return result.rows;
   }
 
@@ -370,6 +379,23 @@ const Payments = (() => {
       state.page = 1;
       load();
     }));
+
+    Utils.populateCourseSelect('payCourseFilter', 'All courses');
+    document.getElementById('payCourseFilter').addEventListener('change', (e) => {
+      state.course = e.target.value;
+      state.page = 1;
+      load();
+    });
+    document.getElementById('payDateFrom').addEventListener('change', (e) => {
+      state.dateFrom = e.target.value;
+      state.page = 1;
+      load();
+    });
+    document.getElementById('payDateTo').addEventListener('change', (e) => {
+      state.dateTo = e.target.value;
+      state.page = 1;
+      load();
+    });
 
     document.getElementById('payExportCsv').addEventListener('click', async () => {
       Utils.showLoading();

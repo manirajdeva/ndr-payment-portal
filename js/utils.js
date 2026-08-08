@@ -4,6 +4,19 @@
  */
 
 const Utils = (() => {
+  const COURSE_OPTIONS = [
+    'Snowflake', 'Snowflake +DBT', 'Azure', 'Aws', 'Sap-Modules',
+    'Bussiness Analyst', 'GenarativeAI', 'Python'
+  ];
+
+  /** Fills a <select> with COURSE_OPTIONS. Pass allLabel to prepend an "All courses" filter option. */
+  function populateCourseSelect(selectId, allLabel) {
+    const select = document.getElementById(selectId);
+    if (!select) return;
+    const optionsHtml = COURSE_OPTIONS.map(c => `<option>${c}</option>`).join('');
+    select.innerHTML = (allLabel ? `<option value="">${allLabel}</option>` : '<option value="">Select course</option>') + optionsHtml;
+  }
+
   function toast(icon, title) {
     Swal.fire({
       toast: true,
@@ -227,6 +240,7 @@ const Utils = (() => {
     toast, success, error, info, confirmDialog, showLoading, hideLoading,
     todayISO, formatDate, formatDateTime, formatCurrency, timeAgo, debounce,
     isValidEmail, isValidMobile, escapeHtml, genTempId, pendingIndicatorHtml, renderPagination, wireSortableHeaders,
-    exportCSV, exportExcel, exportPDF
+    exportCSV, exportExcel, exportPDF,
+    COURSE_OPTIONS, populateCourseSelect
   };
 })();

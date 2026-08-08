@@ -23,7 +23,7 @@ function setup() {
     'Course', 'Organization', 'Job Joining Date', 'CreatedAt', 'UpdatedAt'
   ]);
   ensureSheet_(spreadsheet, SHEET_NAMES.PAYMENTS, [
-    'Payment ID', 'Student ID', 'Student Name', 'Job Offer Date',
+    'Payment ID', 'Student ID', 'Student Name', 'Course', 'Job Offer Date',
     'Total Course Fee', 'Payment Received', 'Payment Method',
     'Pending Amount', 'Payment Date', 'CreatedAt'
   ]);

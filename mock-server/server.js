@@ -29,6 +29,10 @@ const JOB_STATUS_OPTIONS = [
 ];
 const PAYMENT_METHODS = ['Cash', 'UPI', 'Google Pay', 'PhonePe', 'Bank Transfer', 'Credit Card', 'Debit Card'];
 const QUALIFICATION_OPTIONS = ['10th', '12th', 'Diploma', 'Graduate', 'Post Graduate', 'Other'];
+const COURSE_OPTIONS = [
+  'Snowflake', 'Snowflake +DBT', 'Azure', 'Aws', 'Sap-Modules',
+  'Bussiness Analyst', 'GenarativeAI', 'Python'
+];
 
 /* ---------------- In-memory store ---------------- */
 
@@ -59,8 +63,19 @@ function requireFields(data, fields) {
 function isValidEmail(email) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email).trim()); }
 function isValidMobile(mobile) { return /^[6-9]\d{9}$/.test(String(mobile).trim()); }
 
+function buildDateCourseFilter(params, dateField) {
+  const { dateFrom, dateTo, course } = params;
+  if (!dateFrom && !dateTo && !course) return null;
+  return (row) => {
+    if (dateFrom && String(row[dateField] || '') < dateFrom) return false;
+    if (dateTo && String(row[dateField] || '') > dateTo) return false;
+    if (course && row['Course'] !== course) return false;
+    return true;
+  };
+}
+
 function paginateAndSort(rows, params) {
-  let result = rows;
+  let result = params.filterFn ? rows.filter(params.filterFn) : rows;
   const search = (params.search || '').toString().trim().toLowerCase();
   const searchFields = params.searchFields || [];
   if (search && searchFields.length) {
@@ -170,6 +185,12 @@ function validateQualificationValue(qualification) {
   }
 }
 
+function validateCourseValue(course) {
+  if (!COURSE_OPTIONS.includes(course)) {
+    throw new AppError('VALIDATION_ERROR', 'Invalid course value.');
+  }
+}
+
 function assertNoDuplicateStudent(data, excludeStudentId) {
   const mobile = String(data['Mobile Number']).trim();
   const email = String(data['Gmail']).trim().toLowerCase();
@@ -190,6 +211,7 @@ function action_getStudents(params) {
   requireSession(params);
   return paginateAndSort(db.students, {
     search: params.search, searchFields: ['Student ID', 'Student Name', 'Mobile Number', 'Gmail'],
+    filterFn: buildDateCourseFilter(params, 'Enquiry Date'),
     sortBy: params.sortBy || 'CreatedAt', sortDir: params.sortDir || 'desc', page: params.page, pageSize: params.pageSize
   });
 }
@@ -210,6 +232,7 @@ function action_addStudent(params) {
   requireFields(data, ['Student Name', 'Course', 'Gmail', 'Mobile Number']);
   if (!isValidEmail(data['Gmail'])) throw new AppError('VALIDATION_ERROR', 'Please enter a valid email address.');
   if (!isValidMobile(data['Mobile Number'])) throw new AppError('VALIDATION_ERROR', 'Please enter a valid 10-digit mobile number.');
+  validateCourseValue(data['Course']);
   validateQualificationValue(data['Qualification']);
   assertNoDuplicateStudent(data, null);
 
@@ -235,6 +258,7 @@ function action_updateStudent(params) {
   requireFields(data, ['Student ID', 'Student Name', 'Course', 'Gmail', 'Mobile Number']);
   if (!isValidEmail(data['Gmail'])) throw new AppError('VALIDATION_ERROR', 'Please enter a valid email address.');
   if (!isValidMobile(data['Mobile Number'])) throw new AppError('VALIDATION_ERROR', 'Please enter a valid 10-digit mobile number.');
+  validateCourseValue(data['Course']);
   validateQualificationValue(data['Qualification']);
 
   const student = getStudentById(data['Student ID']);
@@ -275,6 +299,7 @@ function action_getJobStatus(params) {
   requireSession(params);
   return paginateAndSort(db.jobs, {
     search: params.search, searchFields: ['Student ID', 'Student Name', 'Organization', 'Job Status'],
+    filterFn: buildDateCourseFilter(params, 'Office Joining Date'),
     sortBy: params.sortBy || 'CreatedAt', sortDir: params.sortDir || 'desc', page: params.page, pageSize: params.pageSize
   });
 }
@@ -342,6 +367,7 @@ function action_getPayments(params) {
   requireSession(params);
   return paginateAndSort(db.payments, {
     search: params.search, searchFields: ['Payment ID', 'Student ID', 'Student Name', 'Payment Method'],
+    filterFn: buildDateCourseFilter(params, 'Payment Date'),
     sortBy: params.sortBy || 'CreatedAt', sortDir: params.sortDir || 'desc', page: params.page, pageSize: params.pageSize
   });
 }
@@ -367,7 +393,7 @@ function action_savePayment(params) {
   const row = {
     _row: counters.paymentRow++,
     'Payment ID': 'PMT' + String(++counters.paymentSeq).padStart(6, '0'),
-    'Student ID': student['Student ID'], 'Student Name': student['Student Name'],
+    'Student ID': student['Student ID'], 'Student Name': student['Student Name'], 'Course': student['Course'],
     'Job Offer Date': data['Job Offer Date'] || '', 'Total Course Fee': totalFee,
     'Payment Received': received, 'Payment Method': data['Payment Method'],
     'Pending Amount': pending, 'Payment Date': data['Payment Date'] || todayISO(),
@@ -521,7 +547,7 @@ function action_reports(params) {
 /* ---------------- Seed data (for a populated dashboard on first run) ---------------- */
 
 function seed() {
-  const courses = ['Full Stack Development', 'Data Science', 'Digital Marketing', 'UI/UX Design', 'Cloud Computing'];
+  const courses = COURSE_OPTIONS;
   const orgs = ['Infosys', 'TCS', 'Wipro', 'Accenture', 'Cognizant'];
   const names = ['Aarav Sharma', 'Diya Patel', 'Vihaan Reddy', 'Ananya Iyer', 'Kabir Singh', 'Ishita Nair', 'Reyansh Rao', 'Myra Gupta', 'Aditya Kumar', 'Saanvi Joshi', 'Arjun Mehta', 'Kiara Verma'];
 
@@ -563,7 +589,7 @@ function seed() {
       db.payments.push({
         _row: counters.paymentRow++,
         'Payment ID': 'PMT' + String(++counters.paymentSeq).padStart(6, '0'),
-        'Student ID': student['Student ID'], 'Student Name': student['Student Name'],
+        'Student ID': student['Student ID'], 'Student Name': student['Student Name'], 'Course': student['Course'],
         'Job Offer Date': '', 'Total Course Fee': fee, 'Payment Received': received,
         'Payment Method': PAYMENT_METHODS[i % PAYMENT_METHODS.length],
         'Pending Amount': round2(fee - received), 'Payment Date': enquiryDate, 'CreatedAt': createdAt

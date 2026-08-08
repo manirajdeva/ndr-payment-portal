@@ -15,6 +15,7 @@ function action_getJobStatus(params) {
   var result = paginateAndSort_(rows, {
     search: params.search,
     searchFields: ['Student ID', 'Student Name', 'Organization', 'Job Status'],
+    filterFn: buildDateCourseFilter_(params, 'Office Joining Date'),
     sortBy: params.sortBy || 'CreatedAt',
     sortDir: params.sortDir || 'desc',
     page: params.page,

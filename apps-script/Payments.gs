@@ -16,6 +16,7 @@ function action_getPayments(params) {
   var result = paginateAndSort_(rows, {
     search: params.search,
     searchFields: ['Payment ID', 'Student ID', 'Student Name', 'Payment Method'],
+    filterFn: buildDateCourseFilter_(params, 'Payment Date'),
     sortBy: params.sortBy || 'CreatedAt',
     sortDir: params.sortDir || 'desc',
     page: params.page,
@@ -56,6 +57,7 @@ function action_savePayment(params) {
       'Payment ID': paymentId,
       'Student ID': student['Student ID'],
       'Student Name': student['Student Name'],
+      'Course': student['Course'],
       'Job Offer Date': data['Job Offer Date'] || '',
       'Total Course Fee': totalFee,
       'Payment Received': received,

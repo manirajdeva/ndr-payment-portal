@@ -11,7 +11,7 @@
  */
 
 const Enquiries = (() => {
-  const state = { page: 1, pageSize: 10, search: '', sortBy: 'CreatedAt', sortDir: 'desc' };
+  const state = { page: 1, pageSize: 10, search: '', course: '', dateFrom: '', dateTo: '', sortBy: 'CreatedAt', sortDir: 'desc' };
   let cache = [];
   let meta = { total: 0, page: 1, pageSize: 10, totalPages: 1 };
   let loaded = false;
@@ -256,11 +256,15 @@ const Enquiries = (() => {
   }
 
   async function fetchAllForExport() {
-    const result = await Api.getStudents({ search: state.search, sortBy: state.sortBy, sortDir: state.sortDir, page: 1, pageSize: 100000 });
+    const result = await Api.getStudents({
+      search: state.search, course: state.course, dateFrom: state.dateFrom, dateTo: state.dateTo,
+      sortBy: state.sortBy, sortDir: state.sortDir, page: 1, pageSize: 100000
+    });
     return result.rows;
   }
 
   function wireEvents() {
+    Utils.populateCourseSelect('enqCourse');
     document.getElementById('enqAddBtn').addEventListener('click', openAddModal);
     document.getElementById('enqForm').addEventListener('submit', handleSubmit);
 
@@ -269,6 +273,23 @@ const Enquiries = (() => {
       state.page = 1;
       load();
     }));
+
+    Utils.populateCourseSelect('enqCourseFilter', 'All courses');
+    document.getElementById('enqCourseFilter').addEventListener('change', (e) => {
+      state.course = e.target.value;
+      state.page = 1;
+      load();
+    });
+    document.getElementById('enqDateFrom').addEventListener('change', (e) => {
+      state.dateFrom = e.target.value;
+      state.page = 1;
+      load();
+    });
+    document.getElementById('enqDateTo').addEventListener('change', (e) => {
+      state.dateTo = e.target.value;
+      state.page = 1;
+      load();
+    });
 
     document.getElementById('enqExportCsv').addEventListener('click', async () => {
       Utils.showLoading();

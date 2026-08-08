@@ -51,6 +51,7 @@ function action_getStudents(params) {
   var result = paginateAndSort_(rows, {
     search: params.search,
     searchFields: ['Student ID', 'Student Name', 'Mobile Number', 'Gmail'],
+    filterFn: buildDateCourseFilter_(params, 'Enquiry Date'),
     sortBy: params.sortBy || 'CreatedAt',
     sortDir: params.sortDir || 'desc',
     page: params.page,
@@ -84,6 +85,7 @@ function action_addStudent(params) {
   if (!isValidMobile_(data['Mobile Number'])) {
     throw new AppError_('VALIDATION_ERROR', 'Please enter a valid 10-digit mobile number.');
   }
+  validateCourseValue_(data['Course']);
   validateQualificationValue_(data['Qualification']);
 
   var lock = LockService.getScriptLock();
@@ -125,6 +127,7 @@ function action_updateStudent(params) {
   if (!isValidMobile_(data['Mobile Number'])) {
     throw new AppError_('VALIDATION_ERROR', 'Please enter a valid 10-digit mobile number.');
   }
+  validateCourseValue_(data['Course']);
   validateQualificationValue_(data['Qualification']);
 
   var lock = LockService.getScriptLock();

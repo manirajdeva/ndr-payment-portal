@@ -15,6 +15,17 @@ var SHEET_NAMES = {
 
 var SESSION_TTL_MS = 4 * 60 * 60 * 1000; // 4 hours
 
+var COURSE_OPTIONS = [
+  'Snowflake', 'Snowflake +DBT', 'Azure', 'Aws', 'Sap-Modules',
+  'Bussiness Analyst', 'GenarativeAI', 'Python'
+];
+
+function validateCourseValue_(course) {
+  if (COURSE_OPTIONS.indexOf(course) === -1) {
+    throw new AppError_('VALIDATION_ERROR', 'Invalid course value.');
+  }
+}
+
 function ss_() {
   return SpreadsheetApp.getActiveSpreadsheet();
 }
@@ -181,7 +192,27 @@ function isValidMobile_(mobile) {
 
 /* ---------------- Pagination / sorting / search ---------------- */
 
+/**
+ * Builds a row filter predicate from optional `dateFrom`/`dateTo`/`course`
+ * params, matching `dateField` for the date range and the `Course` column
+ * exactly. Returns null when none of those filters are set (no-op).
+ */
+function buildDateCourseFilter_(params, dateField) {
+  var dateFrom = params.dateFrom, dateTo = params.dateTo, course = params.course;
+  if (!dateFrom && !dateTo && !course) return null;
+  return function (row) {
+    if (dateFrom && String(row[dateField] || '') < dateFrom) return false;
+    if (dateTo && String(row[dateField] || '') > dateTo) return false;
+    if (course && row['Course'] !== course) return false;
+    return true;
+  };
+}
+
 function paginateAndSort_(rows, params) {
+  if (typeof params.filterFn === 'function') {
+    rows = rows.filter(params.filterFn);
+  }
+
   var search = (params.search || '').toString().trim().toLowerCase();
   var searchFields = params.searchFields || [];
   if (search && searchFields.length) {

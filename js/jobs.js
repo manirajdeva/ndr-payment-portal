@@ -11,7 +11,7 @@
  */
 
 const Jobs = (() => {
-  const state = { page: 1, pageSize: 10, search: '', sortBy: 'CreatedAt', sortDir: 'desc' };
+  const state = { page: 1, pageSize: 10, search: '', course: '', dateFrom: '', dateTo: '', sortBy: 'CreatedAt', sortDir: 'desc' };
   let cache = [];
   let meta = { total: 0, page: 1, pageSize: 10, totalPages: 1 };
   let selectedStudent = null;
@@ -320,7 +320,10 @@ const Jobs = (() => {
   }
 
   async function fetchAllForExport() {
-    const result = await Api.getJobStatus({ search: state.search, sortBy: state.sortBy, sortDir: state.sortDir, page: 1, pageSize: 100000 });
+    const result = await Api.getJobStatus({
+      search: state.search, course: state.course, dateFrom: state.dateFrom, dateTo: state.dateTo,
+      sortBy: state.sortBy, sortDir: state.sortDir, page: 1, pageSize: 100000
+    });
     return result.rows;
   }
 
@@ -334,6 +337,23 @@ const Jobs = (() => {
       state.page = 1;
       load();
     }));
+
+    Utils.populateCourseSelect('jobCourseFilter', 'All courses');
+    document.getElementById('jobCourseFilter').addEventListener('change', (e) => {
+      state.course = e.target.value;
+      state.page = 1;
+      load();
+    });
+    document.getElementById('jobDateFrom').addEventListener('change', (e) => {
+      state.dateFrom = e.target.value;
+      state.page = 1;
+      load();
+    });
+    document.getElementById('jobDateTo').addEventListener('change', (e) => {
+      state.dateTo = e.target.value;
+      state.page = 1;
+      load();
+    });
 
     document.getElementById('jobExportCsv').addEventListener('click', async () => {
       Utils.showLoading();

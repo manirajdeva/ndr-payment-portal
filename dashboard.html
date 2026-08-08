@@ -106,6 +106,9 @@
           <div class="table-toolbar">
             <div class="d-flex gap-2 flex-wrap">
               <input type="text" class="form-control" id="enqSearch" placeholder="Search by name, mobile, email or ID..." style="min-width:260px;">
+              <select class="form-select" id="enqCourseFilter" style="max-width:180px;"></select>
+              <input type="date" class="form-control" id="enqDateFrom" title="Enquiry date from" style="max-width:150px;">
+              <input type="date" class="form-control" id="enqDateTo" title="Enquiry date to" style="max-width:150px;">
             </div>
             <div class="d-flex gap-2 flex-wrap">
               <button class="btn btn-outline-primary btn-sm" id="enqExportCsv"><i class="fa-solid fa-file-csv me-1"></i>CSV</button>
@@ -142,6 +145,9 @@
           <div class="table-toolbar">
             <div class="d-flex gap-2 flex-wrap">
               <input type="text" class="form-control" id="jobSearch" placeholder="Search by student, organization or status..." style="min-width:260px;">
+              <select class="form-select" id="jobCourseFilter" style="max-width:180px;"></select>
+              <input type="date" class="form-control" id="jobDateFrom" title="Office joining date from" style="max-width:150px;">
+              <input type="date" class="form-control" id="jobDateTo" title="Office joining date to" style="max-width:150px;">
             </div>
             <div class="d-flex gap-2 flex-wrap">
               <button class="btn btn-outline-primary btn-sm" id="jobExportCsv"><i class="fa-solid fa-file-csv me-1"></i>CSV</button>
@@ -177,6 +183,9 @@
           <div class="table-toolbar">
             <div class="d-flex gap-2 flex-wrap">
               <input type="text" class="form-control" id="paySearch" placeholder="Search by student, payment ID or method..." style="min-width:260px;">
+              <select class="form-select" id="payCourseFilter" style="max-width:180px;"></select>
+              <input type="date" class="form-control" id="payDateFrom" title="Payment date from" style="max-width:150px;">
+              <input type="date" class="form-control" id="payDateTo" title="Payment date to" style="max-width:150px;">
             </div>
             <div class="d-flex gap-2 flex-wrap">
               <button class="btn btn-outline-primary btn-sm" id="payExportCsv"><i class="fa-solid fa-file-csv me-1"></i>CSV</button>
@@ -192,6 +201,7 @@
                   <th data-sort="Payment ID">Payment ID</th>
                   <th data-sort="Student ID">Student ID</th>
                   <th data-sort="Student Name">Name</th>
+                  <th data-sort="Course">Course</th>
                   <th data-sort="Total Course Fee">Total Fee</th>
                   <th data-sort="Payment Received">Received</th>
                   <th data-sort="Pending Amount">Pending</th>
@@ -222,7 +232,7 @@
             </div>
             <div class="col-md-3">
               <label class="form-label">Course</label>
-              <input type="text" class="form-control" id="rptCourse" placeholder="e.g. Full Stack Development">
+              <select class="form-select" id="rptCourse"></select>
             </div>
             <div class="col-md-3">
               <label class="form-label">Organization</label>
@@ -342,7 +352,9 @@
             </div>
             <div class="col-md-6">
               <label class="form-label">Course <span class="text-danger">*</span></label>
-              <input type="text" class="form-control" id="enqCourse" required placeholder="e.g. Full Stack Development">
+              <select class="form-select" id="enqCourse" required>
+                <option value="">Select course</option>
+              </select>
             </div>
             <div class="col-md-6">
               <label class="form-label">Qualification</label>
@@ -449,6 +461,10 @@
             <div class="col-md-6">
               <label class="form-label">Student Name</label>
               <input type="text" class="form-control" id="payStudentName" readonly>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Course</label>
+              <input type="text" class="form-control" id="payCourse" readonly>
             </div>
             <div class="col-md-6">
               <label class="form-label">Job Offer Date</label>

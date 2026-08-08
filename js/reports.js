@@ -90,6 +90,7 @@ const Reports = (() => {
 
   function init() {
     populateJobStatusDropdown();
+    Utils.populateCourseSelect('rptCourse', 'All');
     wireEvents();
   }
 
