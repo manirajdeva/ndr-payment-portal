@@ -23,7 +23,7 @@ const SESSION_TTL_MS = 4 * 60 * 60 * 1000;
 const ADMIN_USERNAME = 'admin';
 const ADMIN_PASSWORD = 'Admin@123';
 const EXTRA_USERS = [
-  { username: 'hrndr@admin', password: 'Hr@2026@', role: 'viewer' }
+  { username: 'hrndr@admin', password: 'Hr@2026@', role: 'hr' }
 ];
 
 const JOB_STATUS_OPTIONS = [
@@ -183,6 +183,13 @@ function requireAdmin(params) {
   return session;
 }
 
+/** Like requireAdmin, but also allows the given extra role(s) through (e.g. 'hr' for create-only actions). */
+function requireRole(params, allowedRoles) {
+  const session = requireSession(params);
+  if (session.role === 'admin' || allowedRoles.includes(session.role)) return session;
+  throw new AppError('FORBIDDEN', 'Your account does not have permission to make changes.');
+}
+
 /* ---------------- Students (Module 1) ---------------- */
 
 function generateStudentId() {
@@ -247,7 +254,7 @@ function action_searchStudent(params) {
 }
 
 function action_addStudent(params) {
-  requireAdmin(params);
+  requireRole(params, ['hr']);
   const data = params.data || {};
   requireFields(data, ['Student Name', 'Course', 'Gmail', 'Mobile Number']);
   if (!isValidEmail(data['Gmail'])) throw new AppError('VALIDATION_ERROR', 'Please enter a valid email address.');
@@ -325,7 +332,7 @@ function action_getJobStatus(params) {
 }
 
 function action_saveJobStatus(params) {
-  requireAdmin(params);
+  requireRole(params, ['hr']);
   const data = params.data || {};
   requireFields(data, ['Student ID', 'Job Status']);
   validateJobStatusValue(data['Job Status']);

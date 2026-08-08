@@ -25,7 +25,7 @@ function action_getJobStatus(params) {
 }
 
 function action_saveJobStatus(params) {
-  requireAdmin_(params);
+  requireRole_(params, ['hr']);
   var data = params.data || {};
   requireFields_(data, ['Student ID', 'Job Status']);
   validateJobStatusValue_(data['Job Status']);

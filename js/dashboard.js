@@ -93,10 +93,17 @@ const App = (() => {
     document.getElementById('userName').textContent = username;
     document.getElementById('userInitial').textContent = username.charAt(0).toUpperCase();
     document.getElementById('settingsUsername').textContent = username;
-    document.getElementById('settingsRole').textContent = Auth.getRole() === 'admin' ? 'Admin (full access)' : 'Viewer (read-only)';
+    const role = Auth.getRole();
+    document.getElementById('settingsRole').textContent =
+      role === 'admin' ? 'Admin (full access)' :
+      role === 'hr' ? 'HR (can add Students & Job Status; no edit/delete, no Payments)' :
+      'Viewer (read-only)';
 
     if (!Auth.isAdmin()) {
       document.querySelectorAll('.admin-only').forEach(el => el.classList.add('d-none'));
+    }
+    if (!Auth.canCreate()) {
+      document.querySelectorAll('.creator-only').forEach(el => el.classList.add('d-none'));
     }
 
     const session = Auth.getSession();

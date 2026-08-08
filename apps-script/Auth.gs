@@ -85,6 +85,20 @@ function requireAdmin_(params) {
   return session;
 }
 
+/**
+ * Like requireAdmin_, but also allows the given extra role(s) through —
+ * used for create-only actions (e.g. addStudent, saveJobStatus) that some
+ * non-admin roles (like 'hr') are permitted to perform, while still being
+ * blocked from editing/deleting anything.
+ */
+function requireRole_(params, allowedRoles) {
+  var session = requireSession_(params);
+  if (session.role === 'admin' || allowedRoles.indexOf(session.role) !== -1) {
+    return session;
+  }
+  throw new AppError_('FORBIDDEN', 'Your account does not have permission to make changes.');
+}
+
 function readConfig_(configSheet) {
   var rows = configSheet.getDataRange().getValues();
   var config = {};

@@ -71,21 +71,32 @@ function seedConfig_(spreadsheet) {
 }
 
 /**
- * Extra named accounts beyond the primary admin, seeded once and never
- * overwritten on re-run (seedUsers_ skips any username already present in
- * the Users sheet) — so it's safe to blank out a password here right after
- * it's been seeded once, instead of leaving it in source control.
+ * Extra named accounts beyond the primary admin. `password` is only used
+ * the first time a username is seeded — once a user row exists, its
+ * password hash is left alone (safe to blank the password here afterward
+ * instead of leaving it in source control), but its `role` is re-synced
+ * on every setup() run, so changing the role below and re-running setup()
+ * is enough to update an existing account's permissions.
+ *
+ * Roles: 'admin' (full access, reserved for the primary Config-based
+ * admin), 'hr' (can add Students + Job Status, cannot edit/delete
+ * anything, no Payments access), 'viewer' (read-only).
  */
 var EXTRA_USERS = [
-  { username: 'hrndr@admin', password: 'CHANGE_ME_ALREADY_SEEDED', role: 'viewer' }
+  { username: 'hrndr@admin', password: 'CHANGE_ME_ALREADY_SEEDED', role: 'hr' }
 ];
 
 function seedUsers_(spreadsheet) {
   var usersSheet = spreadsheet.getSheetByName(SHEET_NAMES.USERS);
-  var existing = readAllRows_(usersSheet);
+  var sheetData = readAllRowsWithHeaders_(usersSheet);
   EXTRA_USERS.forEach(function (user) {
-    var already = existing.some(function (row) { return row['Username'] === user.username; });
-    if (already) return;
+    var existingRow = sheetData.rows.find(function (row) { return row['Username'] === user.username; });
+    if (existingRow) {
+      if (existingRow['Role'] !== user.role) {
+        writeObjectToRow_(usersSheet, existingRow._row, { 'Role': user.role }, sheetData.headers);
+      }
+      return;
+    }
     var salt = Utilities.getUuid();
     var hash = hashPassword_(user.password, salt);
     usersSheet.appendRow([user.username, salt, hash, user.role, nowIso_()]);

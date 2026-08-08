@@ -42,6 +42,11 @@ const Auth = (() => {
     return getRole() === 'admin';
   }
 
+  /** True for roles allowed to create Students/Job Status entries (admin or hr), but not edit/delete them. */
+  function canCreate() {
+    return isAdmin() || getRole() === 'hr';
+  }
+
   function clearSession() {
     sessionStorage.removeItem(KEY);
   }
@@ -74,5 +79,5 @@ const Auth = (() => {
     location.href = 'login.html';
   }
 
-  return { saveSession, getSession, getToken, getUsername, getRole, isAdmin, clearSession, isLoggedIn, guardPage, watchSessionExpiry, logout };
+  return { saveSession, getSession, getToken, getUsername, getRole, isAdmin, canCreate, clearSession, isLoggedIn, guardPage, watchSessionExpiry, logout };
 })();
