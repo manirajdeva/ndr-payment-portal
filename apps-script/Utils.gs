@@ -8,6 +8,7 @@ var SHEET_NAMES = {
   CONFIG: 'Config',
   SESSIONS: 'Sessions',
   COUNTERS: 'Counters',
+  USERS: 'Users',
   ENQUIRIES: 'Student Enquiries',
   JOBS: 'Job Status',
   PAYMENTS: 'Student Payments'

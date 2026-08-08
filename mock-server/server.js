@@ -22,6 +22,9 @@ const PORT = 3001;
 const SESSION_TTL_MS = 4 * 60 * 60 * 1000;
 const ADMIN_USERNAME = 'admin';
 const ADMIN_PASSWORD = 'Admin@123';
+const EXTRA_USERS = [
+  { username: 'hrndr@admin', password: 'Hr@2026@', role: 'viewer' }
+];
 
 const JOB_STATUS_OPTIONS = [
   'Pending', 'Training', 'Interview Scheduled', 'Interview Cleared',
@@ -140,13 +143,22 @@ function latestPerStudent(jobRows) {
 
 function action_login(params) {
   requireFields(params, ['username', 'password']);
-  if (String(params.username).trim() !== ADMIN_USERNAME || String(params.password) !== ADMIN_PASSWORD) {
-    throw new AppError('INVALID_CREDENTIALS', 'Invalid username or password.');
+  const username = String(params.username).trim();
+  const password = String(params.password);
+
+  let role = null;
+  if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
+    role = 'admin';
+  } else {
+    const extra = EXTRA_USERS.find(u => u.username === username && u.password === password);
+    if (extra) role = extra.role;
   }
+  if (!role) throw new AppError('INVALID_CREDENTIALS', 'Invalid username or password.');
+
   const token = crypto.randomUUID();
   const expiresAt = Date.now() + SESSION_TTL_MS;
-  sessions.set(token, { username: ADMIN_USERNAME, expiresAt });
-  return { token, username: ADMIN_USERNAME, expiresAt };
+  sessions.set(token, { username, role, expiresAt });
+  return { token, username, role, expiresAt };
 }
 
 function action_logout(params) {
@@ -159,6 +171,14 @@ function requireSession(params) {
   if (!session || session.expiresAt < Date.now()) {
     sessions.delete(params.token);
     throw new AppError('SESSION_EXPIRED', 'Your session has expired. Please log in again.');
+  }
+  return session;
+}
+
+function requireAdmin(params) {
+  const session = requireSession(params);
+  if (session.role !== 'admin') {
+    throw new AppError('FORBIDDEN', 'Your account does not have permission to make changes.');
   }
   return session;
 }
@@ -227,7 +247,7 @@ function action_searchStudent(params) {
 }
 
 function action_addStudent(params) {
-  requireSession(params);
+  requireAdmin(params);
   const data = params.data || {};
   requireFields(data, ['Student Name', 'Course', 'Gmail', 'Mobile Number']);
   if (!isValidEmail(data['Gmail'])) throw new AppError('VALIDATION_ERROR', 'Please enter a valid email address.');
@@ -253,7 +273,7 @@ function action_addStudent(params) {
 }
 
 function action_updateStudent(params) {
-  requireSession(params);
+  requireAdmin(params);
   const data = params.data || {};
   requireFields(data, ['Student ID', 'Student Name', 'Course', 'Gmail', 'Mobile Number']);
   if (!isValidEmail(data['Gmail'])) throw new AppError('VALIDATION_ERROR', 'Please enter a valid email address.');
@@ -280,7 +300,7 @@ function action_updateStudent(params) {
 }
 
 function action_deleteStudent(params) {
-  requireSession(params);
+  requireAdmin(params);
   const studentId = params.data && params.data['Student ID'];
   if (isBlank(studentId)) throw new AppError('VALIDATION_ERROR', 'Student ID is required.');
   const idx = db.students.findIndex(s => s['Student ID'] === studentId);
@@ -305,7 +325,7 @@ function action_getJobStatus(params) {
 }
 
 function action_saveJobStatus(params) {
-  requireSession(params);
+  requireAdmin(params);
   const data = params.data || {};
   requireFields(data, ['Student ID', 'Job Status']);
   validateJobStatusValue(data['Job Status']);
@@ -326,7 +346,7 @@ function action_saveJobStatus(params) {
 }
 
 function action_updateJobStatus(params) {
-  requireSession(params);
+  requireAdmin(params);
   const data = params.data || {};
   requireFields(data, ['_row', 'Job Status']);
   validateJobStatusValue(data['Job Status']);
@@ -343,7 +363,7 @@ function action_updateJobStatus(params) {
 }
 
 function action_deleteJobStatus(params) {
-  requireSession(params);
+  requireAdmin(params);
   const rowIndex = Number(params.data && params.data['_row']);
   const idx = db.jobs.findIndex(j => j._row === rowIndex);
   if (idx === -1) throw new AppError('NOT_FOUND', 'Job status record not found.');
@@ -373,7 +393,7 @@ function action_getPayments(params) {
 }
 
 function action_savePayment(params) {
-  requireSession(params);
+  requireAdmin(params);
   const data = params.data || {};
   requireFields(data, ['Student ID', 'Total Course Fee', 'Payment Received', 'Payment Method']);
   validatePaymentMethod(data['Payment Method']);
@@ -404,7 +424,7 @@ function action_savePayment(params) {
 }
 
 function action_updatePayment(params) {
-  requireSession(params);
+  requireAdmin(params);
   const data = params.data || {};
   requireFields(data, ['_row', 'Total Course Fee', 'Payment Received', 'Payment Method']);
   validatePaymentMethod(data['Payment Method']);
@@ -430,7 +450,7 @@ function action_updatePayment(params) {
 }
 
 function action_deletePayment(params) {
-  requireSession(params);
+  requireAdmin(params);
   const rowIndex = Number(params.data && params.data['_row']);
   const idx = db.payments.findIndex(p => p._row === rowIndex);
   if (idx === -1) throw new AppError('NOT_FOUND', 'Payment record not found.');

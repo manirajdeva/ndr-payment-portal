@@ -7,8 +7,8 @@
 const Auth = (() => {
   const KEY = 'ndr_session';
 
-  function saveSession({ token, username, expiresAt }) {
-    sessionStorage.setItem(KEY, JSON.stringify({ token, username, expiresAt }));
+  function saveSession({ token, username, role, expiresAt }) {
+    sessionStorage.setItem(KEY, JSON.stringify({ token, username, role, expiresAt }));
   }
 
   function getSession() {
@@ -32,6 +32,14 @@ const Auth = (() => {
 
   function getUsername() {
     return getSession()?.username || null;
+  }
+
+  function getRole() {
+    return getSession()?.role || null;
+  }
+
+  function isAdmin() {
+    return getRole() === 'admin';
   }
 
   function clearSession() {
@@ -66,5 +74,5 @@ const Auth = (() => {
     location.href = 'login.html';
   }
 
-  return { saveSession, getSession, getToken, getUsername, clearSession, isLoggedIn, guardPage, watchSessionExpiry, logout };
+  return { saveSession, getSession, getToken, getUsername, getRole, isAdmin, clearSession, isLoggedIn, guardPage, watchSessionExpiry, logout };
 })();

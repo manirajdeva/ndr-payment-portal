@@ -25,7 +25,7 @@ function action_getJobStatus(params) {
 }
 
 function action_saveJobStatus(params) {
-  requireSession_(params);
+  requireAdmin_(params);
   var data = params.data || {};
   requireFields_(data, ['Student ID', 'Job Status']);
   validateJobStatusValue_(data['Job Status']);
@@ -60,7 +60,7 @@ function action_saveJobStatus(params) {
 }
 
 function action_updateJobStatus(params) {
-  requireSession_(params);
+  requireAdmin_(params);
   var data = params.data || {};
   requireFields_(data, ['_row', 'Job Status']);
   validateJobStatusValue_(data['Job Status']);
@@ -88,7 +88,7 @@ function action_updateJobStatus(params) {
 }
 
 function action_deleteJobStatus(params) {
-  requireSession_(params);
+  requireAdmin_(params);
   var rowIndex = Number(params.data && params.data['_row']);
   if (!rowIndex) throw new AppError_('VALIDATION_ERROR', 'Record identifier is required.');
   var lock = LockService.getScriptLock();

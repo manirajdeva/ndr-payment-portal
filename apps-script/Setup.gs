@@ -27,8 +27,10 @@ function setup() {
     'Total Course Fee', 'Payment Received', 'Payment Method',
     'Pending Amount', 'Payment Date', 'CreatedAt'
   ]);
+  ensureSheet_(spreadsheet, SHEET_NAMES.USERS, ['Username', 'Salt', 'PasswordHash', 'Role', 'CreatedAt']);
 
   seedConfig_(spreadsheet);
+  seedUsers_(spreadsheet);
 
   // Remove the default "Sheet1" if it's still present and empty.
   var sheet1 = spreadsheet.getSheetByName('Sheet1');
@@ -66,4 +68,26 @@ function seedConfig_(spreadsheet) {
     setConfigValue_(configSheet, 'ADMIN_SALT', salt);
     setConfigValue_(configSheet, 'ADMIN_PASSWORD_HASH', hash);
   }
+}
+
+/**
+ * Extra named accounts beyond the primary admin, seeded once and never
+ * overwritten on re-run (seedUsers_ skips any username already present in
+ * the Users sheet) — so it's safe to blank out a password here right after
+ * it's been seeded once, instead of leaving it in source control.
+ */
+var EXTRA_USERS = [
+  { username: 'hrndr@admin', password: 'CHANGE_ME_ALREADY_SEEDED', role: 'viewer' }
+];
+
+function seedUsers_(spreadsheet) {
+  var usersSheet = spreadsheet.getSheetByName(SHEET_NAMES.USERS);
+  var existing = readAllRows_(usersSheet);
+  EXTRA_USERS.forEach(function (user) {
+    var already = existing.some(function (row) { return row['Username'] === user.username; });
+    if (already) return;
+    var salt = Utilities.getUuid();
+    var hash = hashPassword_(user.password, salt);
+    usersSheet.appendRow([user.username, salt, hash, user.role, nowIso_()]);
+  });
 }

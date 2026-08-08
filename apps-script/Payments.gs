@@ -26,7 +26,7 @@ function action_getPayments(params) {
 }
 
 function action_savePayment(params) {
-  requireSession_(params);
+  requireAdmin_(params);
   var data = params.data || {};
   requireFields_(data, ['Student ID', 'Total Course Fee', 'Payment Received', 'Payment Method']);
   validatePaymentMethod_(data['Payment Method']);
@@ -74,7 +74,7 @@ function action_savePayment(params) {
 }
 
 function action_updatePayment(params) {
-  requireSession_(params);
+  requireAdmin_(params);
   var data = params.data || {};
   requireFields_(data, ['_row', 'Total Course Fee', 'Payment Received', 'Payment Method']);
   validatePaymentMethod_(data['Payment Method']);
@@ -118,7 +118,7 @@ function action_updatePayment(params) {
 }
 
 function action_deletePayment(params) {
-  requireSession_(params);
+  requireAdmin_(params);
   var rowIndex = Number(params.data && params.data['_row']);
   if (!rowIndex) throw new AppError_('VALIDATION_ERROR', 'Record identifier is required.');
   var lock = LockService.getScriptLock();

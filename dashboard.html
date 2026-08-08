@@ -114,7 +114,7 @@
               <button class="btn btn-outline-primary btn-sm" id="enqExportCsv"><i class="fa-solid fa-file-csv me-1"></i>CSV</button>
               <button class="btn btn-outline-primary btn-sm" id="enqExportExcel"><i class="fa-solid fa-file-excel me-1"></i>Excel</button>
               <button class="btn btn-outline-primary btn-sm" id="enqExportPdf"><i class="fa-solid fa-file-pdf me-1"></i>PDF</button>
-              <button class="btn btn-primary btn-sm" id="enqAddBtn"><i class="fa-solid fa-plus me-1"></i>Add Student</button>
+              <button class="btn btn-primary btn-sm admin-only" id="enqAddBtn"><i class="fa-solid fa-plus me-1"></i>Add Student</button>
             </div>
           </div>
           <div class="table-responsive-wrap">
@@ -153,7 +153,7 @@
               <button class="btn btn-outline-primary btn-sm" id="jobExportCsv"><i class="fa-solid fa-file-csv me-1"></i>CSV</button>
               <button class="btn btn-outline-primary btn-sm" id="jobExportExcel"><i class="fa-solid fa-file-excel me-1"></i>Excel</button>
               <button class="btn btn-outline-primary btn-sm" id="jobExportPdf"><i class="fa-solid fa-file-pdf me-1"></i>PDF</button>
-              <button class="btn btn-primary btn-sm" id="jobAddBtn"><i class="fa-solid fa-plus me-1"></i>Add Job Status</button>
+              <button class="btn btn-primary btn-sm admin-only" id="jobAddBtn"><i class="fa-solid fa-plus me-1"></i>Add Job Status</button>
             </div>
           </div>
           <div class="table-responsive-wrap">
@@ -191,7 +191,7 @@
               <button class="btn btn-outline-primary btn-sm" id="payExportCsv"><i class="fa-solid fa-file-csv me-1"></i>CSV</button>
               <button class="btn btn-outline-primary btn-sm" id="payExportExcel"><i class="fa-solid fa-file-excel me-1"></i>Excel</button>
               <button class="btn btn-outline-primary btn-sm" id="payExportPdf"><i class="fa-solid fa-file-pdf me-1"></i>PDF</button>
-              <button class="btn btn-primary btn-sm" id="payAddBtn"><i class="fa-solid fa-plus me-1"></i>Add Payment</button>
+              <button class="btn btn-primary btn-sm admin-only" id="payAddBtn"><i class="fa-solid fa-plus me-1"></i>Add Payment</button>
             </div>
           </div>
           <div class="table-responsive-wrap">
@@ -294,6 +294,7 @@
               <p class="text-muted small">You're logged in as an administrator.</p>
               <table class="table table-sm">
                 <tr><td class="text-muted">Username</td><td class="fw-semibold" id="settingsUsername">-</td></tr>
+                <tr><td class="text-muted">Role</td><td class="fw-semibold" id="settingsRole">-</td></tr>
                 <tr><td class="text-muted">Session expires</td><td class="fw-semibold" id="settingsExpiry">-</td></tr>
                 <tr><td class="text-muted">Backend</td><td class="fw-semibold" id="settingsBackend">-</td></tr>
               </table>

@@ -93,6 +93,11 @@ const App = (() => {
     document.getElementById('userName').textContent = username;
     document.getElementById('userInitial').textContent = username.charAt(0).toUpperCase();
     document.getElementById('settingsUsername').textContent = username;
+    document.getElementById('settingsRole').textContent = Auth.getRole() === 'admin' ? 'Admin (full access)' : 'Viewer (read-only)';
+
+    if (!Auth.isAdmin()) {
+      document.querySelectorAll('.admin-only').forEach(el => el.classList.add('d-none'));
+    }
 
     const session = Auth.getSession();
     if (session) {

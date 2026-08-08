@@ -9,31 +9,45 @@
 function action_login(params) {
   requireFields_(params, ['username', 'password']);
 
-  var configSheet = getSheet_(SHEET_NAMES.CONFIG);
-  var config = readConfig_(configSheet);
-
   var username = String(params.username).trim();
   var password = String(params.password);
-
-  if (username !== config.ADMIN_USERNAME) {
-    throw new AppError_('INVALID_CREDENTIALS', 'Invalid username or password.');
-  }
-
-  var hash = hashPassword_(password, config.ADMIN_SALT);
-  if (hash !== config.ADMIN_PASSWORD_HASH) {
+  var role = authenticate_(username, password);
+  if (!role) {
     throw new AppError_('INVALID_CREDENTIALS', 'Invalid username or password.');
   }
 
   var token = Utilities.getUuid();
   var expiresAt = Date.now() + SESSION_TTL_MS;
   var cache = CacheService.getScriptCache();
-  cache.put('session_' + token, JSON.stringify({ username: username, expiresAt: expiresAt }), SESSION_TTL_MS / 1000);
+  cache.put('session_' + token, JSON.stringify({ username: username, role: role, expiresAt: expiresAt }), SESSION_TTL_MS / 1000);
 
   return {
     token: token,
     username: username,
+    role: role,
     expiresAt: expiresAt
   };
+}
+
+/**
+ * Checks `username`/`password` against the primary Config-based admin
+ * first (unchanged legacy behavior), then falls back to the Users sheet
+ * for additional named accounts. Returns the matched role, or null.
+ */
+function authenticate_(username, password) {
+  var configSheet = getSheet_(SHEET_NAMES.CONFIG);
+  var config = readConfig_(configSheet);
+  if (username === config.ADMIN_USERNAME) {
+    var hash = hashPassword_(password, config.ADMIN_SALT);
+    if (hash === config.ADMIN_PASSWORD_HASH) return 'admin';
+    return null;
+  }
+
+  var usersSheet = getSheet_(SHEET_NAMES.USERS);
+  var user = readAllRows_(usersSheet).find(function (row) { return row['Username'] === username; });
+  if (!user) return null;
+  var userHash = hashPassword_(password, user['Salt']);
+  return userHash === user['PasswordHash'] ? user['Role'] : null;
 }
 
 function action_logout(params) {
@@ -58,6 +72,15 @@ function requireSession_(params) {
   if (session.expiresAt < Date.now()) {
     cache.remove('session_' + token);
     throw new AppError_('SESSION_EXPIRED', 'Your session has expired. Please log in again.');
+  }
+  return session;
+}
+
+/** Like requireSession_, but also rejects non-admin accounts (e.g. read-only viewers) from write actions. */
+function requireAdmin_(params) {
+  var session = requireSession_(params);
+  if (session.role !== 'admin') {
+    throw new AppError_('FORBIDDEN', 'Your account does not have permission to make changes.');
   }
   return session;
 }

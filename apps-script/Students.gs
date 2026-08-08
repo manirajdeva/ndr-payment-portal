@@ -75,7 +75,7 @@ function action_searchStudent(params) {
 }
 
 function action_addStudent(params) {
-  requireSession_(params);
+  requireAdmin_(params);
   var data = params.data || {};
   requireFields_(data, ['Student Name', 'Course', 'Gmail', 'Mobile Number']);
 
@@ -117,7 +117,7 @@ function action_addStudent(params) {
 }
 
 function action_updateStudent(params) {
-  requireSession_(params);
+  requireAdmin_(params);
   var data = params.data || {};
   requireFields_(data, ['Student ID', 'Student Name', 'Course', 'Gmail', 'Mobile Number']);
 
@@ -163,7 +163,7 @@ function action_updateStudent(params) {
 }
 
 function action_deleteStudent(params) {
-  requireSession_(params);
+  requireAdmin_(params);
   var studentId = params.data && params.data['Student ID'];
   if (isBlank_(studentId)) {
     throw new AppError_('VALIDATION_ERROR', 'Student ID is required.');
