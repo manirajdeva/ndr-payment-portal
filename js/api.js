@@ -22,7 +22,7 @@
  * load states which backend is currently active.
  */
 
-const PRODUCTION_APP_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxXPv0ylbo6CRK2lt3xLahnDauEOoBRUr8jvdSujEMEh5EWAemBNCS-8JINudN86Cj0/exec';
+const PRODUCTION_APP_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxw_QrEfpmjD6gCTK7anasTGj2jNGcmFJMLGs1qpsN5Ph2XXcCtsCJgHmvbm4W_nJ1X/exec';
 const LOCAL_MOCK_API_URL = 'http://localhost:3001/exec';
 
 const FORCE_API_STORAGE_KEY = 'ndr_force_api';
