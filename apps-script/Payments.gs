@@ -13,6 +13,10 @@ function action_getPayments(params) {
   requireSession_(params);
   var sheet = getSheet_(SHEET_NAMES.PAYMENTS);
   var rows = readAllRows_(sheet);
+  if (params.latestOnly) {
+    var latestMap = latestPerStudent_(rows);
+    rows = Object.keys(latestMap).map(function (id) { return latestMap[id]; });
+  }
   var result = paginateAndSort_(rows, {
     search: params.search,
     searchFields: ['Payment ID', 'Student ID', 'Student Name', 'Payment Method'],

@@ -394,7 +394,8 @@ function sumPaymentsForStudent(studentId, excludeRow) {
 
 function action_getPayments(params) {
   requireSession(params);
-  return paginateAndSort(db.payments, {
+  const rows = params.latestOnly ? Object.values(latestPerStudent(db.payments)) : db.payments;
+  return paginateAndSort(rows, {
     search: params.search, searchFields: ['Payment ID', 'Student ID', 'Student Name', 'Payment Method'],
     filterFn: buildDateCourseFilter(params, 'Payment Date'),
     sortBy: params.sortBy || 'CreatedAt', sortDir: params.sortDir || 'desc', page: params.page, pageSize: params.pageSize

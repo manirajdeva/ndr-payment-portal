@@ -11,7 +11,7 @@
  */
 
 const Payments = (() => {
-  const state = { page: 1, pageSize: 10, search: '', course: '', dateFrom: '', dateTo: '', sortBy: 'CreatedAt', sortDir: 'desc' };
+  const state = { page: 1, pageSize: 10, search: '', course: '', dateFrom: '', dateTo: '', latestOnly: false, sortBy: 'CreatedAt', sortDir: 'desc' };
   let cache = [];
   let meta = { total: 0, page: 1, pageSize: 10, totalPages: 1 };
   let selectedStudent = null;
@@ -365,7 +365,7 @@ const Payments = (() => {
 
   async function fetchAllForExport() {
     const result = await Api.getPayments({
-      search: state.search, course: state.course, dateFrom: state.dateFrom, dateTo: state.dateTo,
+      search: state.search, course: state.course, dateFrom: state.dateFrom, dateTo: state.dateTo, latestOnly: state.latestOnly,
       sortBy: state.sortBy, sortDir: state.sortDir, page: 1, pageSize: 100000
     });
     return result.rows;
@@ -395,6 +395,11 @@ const Payments = (() => {
     });
     document.getElementById('payDateTo').addEventListener('change', (e) => {
       state.dateTo = e.target.value;
+      state.page = 1;
+      load();
+    });
+    document.getElementById('payLatestOnly').addEventListener('change', (e) => {
+      state.latestOnly = e.target.checked;
       state.page = 1;
       load();
     });

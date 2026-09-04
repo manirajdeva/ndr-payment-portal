@@ -224,7 +224,8 @@ async function action_deleteJobStatus(params) {
 
 async function action_getPayments(params) {
   await requireSession(params);
-  const rows = await store.loadPayments();
+  let rows = await store.loadPayments();
+  if (params.latestOnly) rows = Object.values(latestPerStudent(rows));
   return paginateAndSort(rows, {
     search: params.search, searchFields: ['Payment ID', 'Student ID', 'Student Name', 'Payment Method'],
     filterFn: buildDateCourseFilter(params, 'Payment Date'),
