@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: ndr-tidb-api
+    runtime: node
+    rootDir: tidb-server
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: TIDB_HOST
+        sync: false
+      - key: TIDB_PORT
+        value: "4000"
+      - key: TIDB_USER
+        sync: false
+      - key: TIDB_PASSWORD
+        sync: false
+      - key: TIDB_DATABASE
+        sync: false
+      - key: TIDB_SSL
+        value: "true"
