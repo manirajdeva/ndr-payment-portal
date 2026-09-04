@@ -71,7 +71,7 @@ const Payments = (() => {
       return `
       <tr class="${row._pending ? 'row-pending' : ''}">
         <td>${Utils.escapeHtml(row['Payment ID'])}</td>
-        <td><span class="fw-semibold text-primary">${Utils.escapeHtml(row['Student ID'])}</span></td>
+        <td><a href="#" class="fw-semibold text-primary" data-action="viewStudent" data-student="${Utils.escapeHtml(row['Student ID'])}">${Utils.escapeHtml(row['Student ID'])}</a></td>
         <td>${Utils.escapeHtml(row['Student Name'])}</td>
         <td>${Utils.escapeHtml(row['Course'])}</td>
         <td>${row['_pending'] ? '' : Utils.escapeHtml(row['Installment No'])}</td>
@@ -91,6 +91,46 @@ const Payments = (() => {
 
     tbody.querySelectorAll('[data-action="edit"]').forEach(btn => btn.addEventListener('click', () => openEditModal(Number(btn.dataset.row))));
     tbody.querySelectorAll('[data-action="delete"]').forEach(btn => btn.addEventListener('click', () => deletePayment(Number(btn.dataset.row))));
+    tbody.querySelectorAll('[data-action="viewStudent"]').forEach(link => link.addEventListener('click', (e) => {
+      e.preventDefault();
+      openStudentPaymentsModal(link.dataset.student, link.closest('tr').querySelector('td:nth-child(3)').textContent);
+    }));
+  }
+
+  async function openStudentPaymentsModal(studentId, studentName) {
+    document.getElementById('studentPaymentsModalTitle').textContent = `Payment History — ${studentId}${studentName ? ' · ' + studentName : ''}`;
+    const tbody = document.getElementById('studentPaymentsModalBody');
+    tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted py-4">Loading...</td></tr>`;
+    new bootstrap.Modal('#studentPaymentsModal').show();
+
+    try {
+      const { rows } = await Api.getPayments({ search: studentId, page: 1, pageSize: 100000 });
+      const matches = rows
+        .filter(r => r['Student ID'] === studentId)
+        .sort((a, b) => (Number(a['Installment No']) || 0) - (Number(b['Installment No']) || 0));
+
+      if (!matches.length) {
+        tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted py-4">No payments found for this student.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = matches.map(row => {
+        const pending = Number(row['Pending Amount']) || 0;
+        const pendingClass = pending > 0 ? 'text-danger' : 'text-success';
+        return `
+        <tr>
+          <td>${Utils.escapeHtml(row['Installment No'])}</td>
+          <td>${Utils.escapeHtml(row['Payment ID'])}</td>
+          <td>${Utils.formatCurrency(row['Total Course Fee'])}</td>
+          <td>${Utils.formatCurrency(row['Payment Received'])}</td>
+          <td class="${pendingClass} fw-semibold">${Utils.formatCurrency(pending)}</td>
+          <td>${Utils.escapeHtml(row['Payment Method'])}</td>
+          <td>${Utils.formatDate(row['Payment Date'])}</td>
+        </tr>`;
+      }).join('');
+    } catch (err) {
+      tbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger py-4">${Utils.escapeHtml(err.message)}</td></tr>`;
+    }
   }
 
   function resetStudentPicker() {
