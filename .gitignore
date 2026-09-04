@@ -4,6 +4,10 @@ node_modules/
 .vscode/
 *.log
 
+# Real TiDB connection details / secrets for tidb-server — .env.example is
+# the shared template, .env is per-machine and never committed.
+tidb-server/.env
+
 # Local clasp-linked staging copy used to deploy apps-script/ to a specific
 # Google account's script project (.clasp.json ties it to that account's
 # scriptId). Not shared source of truth — apps-script/ is.

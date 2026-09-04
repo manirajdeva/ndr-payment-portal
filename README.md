@@ -3,8 +3,10 @@
 A production-ready Student Management Portal for NDR EDTECH.
 
 - **Frontend:** HTML5, CSS3, vanilla JavaScript (ES6+), Bootstrap 5, Font Awesome, Chart.js, SweetAlert2 — deployed on **GitHub Pages**.
-- **Backend:** Google Apps Script REST API — deployed as a **Web App**.
-- **Database:** Google Sheets.
+- **Backend:** two interchangeable options behind the exact same action-based JSON API — `js/api.js` and every `js/*.js` module work unchanged against either:
+  - **[tidb-server/](tidb-server/README.md)** — Node/Express + TiDB (MySQL-compatible). **Current production backend.** Deploys to Render (or any Node host).
+  - **apps-script/** — Google Apps Script Web App + Google Sheets. Kept in the repo as a reference/fallback; see section 2 below.
+- **Local testing:** `mock-server/` — zero-dependency, in-memory stand-in for either backend (section 5).
 
 ---
 
@@ -18,7 +20,7 @@ student-portal/
 ├── css/
 │   └── style.css
 ├── js/
-│   ├── api.js            # fetch wrapper for the Apps Script Web App
+│   ├── api.js            # fetch wrapper — same contract, either backend
 │   ├── auth.js            # session storage, login guard, logout
 │   ├── utils.js            # toasts, formatting, validation, export helpers
 │   ├── dashboard.js         # app shell (sidebar/theme/logout) + dashboard charts
@@ -27,7 +29,11 @@ student-portal/
 │   ├── payments.js             # Module 3 — Student Payments CRUD
 │   └── reports.js               # Reports + export
 ├── assets/ images/ icons/
-├── apps-script/            # Google Apps Script backend source (copy into the Apps Script editor)
+├── tidb-server/            # TiDB-backed backend (current production) — see tidb-server/README.md
+│   ├── schema.sql
+│   ├── db.js / logic.js / store.js / server.js / setup.js
+│   └── README.md
+├── apps-script/            # Google Apps Script backend source — reference/fallback (copy into the Apps Script editor)
 │   ├── appsscript.json
 │   ├── Code.gs              # doGet/doPost router
 │   ├── Auth.gs                # login + session validation
@@ -43,7 +49,11 @@ student-portal/
 
 ---
 
-## 2. Backend setup — Google Apps Script + Google Sheets
+## 2. Backend setup — Option A: TiDB (recommended)
+
+See **[tidb-server/README.md](tidb-server/README.md)** — create a free TiDB Cloud Serverless cluster, run `npm run setup`, deploy `tidb-server/` to Render with the included `render.yaml`, then point `js/api.js`'s `PRODUCTION_API_URL` at it. Skip straight to section 3.2 for the GitHub Pages side once that's done.
+
+## 2b. Backend setup — Option B: Google Apps Script + Google Sheets (reference/fallback)
 
 ### 2.1 Create the spreadsheet & script project
 
@@ -100,10 +110,10 @@ Endpoints: `login`, `logout`, `generateStudentID`, `getStudents`, `addStudent`, 
 
 ### 3.1 Point the frontend at your backend
 
-Open [js/api.js](js/api.js) and replace the placeholder with your deployed Web App URL:
+Open [js/api.js](js/api.js) and replace the placeholder with your deployed backend's URL — the `tidb-server` Render URL (option A) or an Apps Script Web App URL (option B):
 
 ```js
-const APP_SCRIPT_URL = 'https://script.google.com/macros/s/XXXXXXXXXXXXXXXXXXXXXXXX/exec';
+const PRODUCTION_API_URL = 'https://ndr-tidb-api.onrender.com/exec';
 ```
 
 ### 3.2 Deploy to GitHub Pages
@@ -129,15 +139,20 @@ Because everything is static HTML/CSS/JS with no build step, no further configur
 - **Reports** — filter by date range, course, job status, payment status, or organization, then export the results to CSV, Excel, or PDF. The same export options are available directly on each module's table.
 - **Settings** — light/dark theme toggle and account info. Password changes are done from the Apps Script editor (see 2.2) rather than the UI, so credentials never pass through the frontend.
 
-## 5. Local testing (no Google account needed)
+## 5. Local testing (no TiDB/Google account needed)
 
-`mock-server/` contains a zero-dependency Node stand-in for the Apps Script
+`mock-server/` contains a zero-dependency Node stand-in for either real
 backend — same action names, same request/response envelope, same
 validation rules (duplicate mobile/email, 10-digit mobile, overpayment,
-negative-pending guard, etc.) as `apps-script/*.gs`, but backed by an
-in-memory store instead of Google Sheets. `js/api.js` automatically points
-at it whenever the page is served from `localhost`/`127.0.0.1`, so no code
-changes are needed to switch between local testing and production.
+negative-pending guard, etc.) as `tidb-server/` and `apps-script/*.gs`, but
+backed by an in-memory store instead of a real database. `js/api.js`
+automatically points at it whenever the page is served from
+`localhost`/`127.0.0.1`, so no code changes are needed to switch between
+local testing and production.
+
+To test a real backend from localhost instead — e.g. a `tidb-server`
+running locally (see [tidb-server/README.md](tidb-server/README.md)) —
+visit with `?api=tidb`; for the deployed production backend, `?api=live`.
 
 Run two terminals from the project root:
 
@@ -157,6 +172,6 @@ seeded students with realistic enquiries, job statuses, and payments spread
 across the last 6 months. Data resets whenever you restart
 `mock-server/server.js` (it's in-memory only).
 
-When you're ready for production: set `PRODUCTION_APP_SCRIPT_URL` in
-`js/api.js` to your real deployed Web App URL (section 3.1) and deploy to
-GitHub Pages — the mock server is never used outside of `localhost`.
+When you're ready for production: set `PRODUCTION_API_URL` in `js/api.js`
+to your deployed backend's URL (section 3.1) and deploy to GitHub Pages —
+the mock server is never used outside of `localhost`.
