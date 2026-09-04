@@ -31,7 +31,7 @@
  * load states which backend is currently active.
  */
 
-const PRODUCTION_API_URL = 'https://script.google.com/macros/s/AKfycbxw_QrEfpmjD6gCTK7anasTGj2jNGcmFJMLGs1qpsN5Ph2XXcCtsCJgHmvbm4W_nJ1X/exec';
+const PRODUCTION_API_URL = 'https://ndr-tidb-api.onrender.com/exec';
 const LOCAL_MOCK_API_URL = 'http://localhost:3001/exec';
 const LOCAL_TIDB_API_URL = 'http://localhost:4001/exec';
 
