@@ -18,7 +18,7 @@ const {
   AppError, JOB_STATUS_OPTIONS, PAYMENT_METHODS, COURSE_OPTIONS,
   todayISO, nowIso, round2, monthKey, requireFields, isValidEmail, isValidMobile,
   validateCourseValue, validateQualificationValue, validateJobStatusValue, validatePaymentMethod,
-  buildDateCourseFilter, paginateAndSort, withInstallmentNumbers, monthlySeries, latestPerStudent, hashPassword, isBlank
+  buildDateCourseFilter, paginateAndSort, monthlySeries, latestPerStudent, hashPassword, isBlank
 } = require('./logic');
 
 const PORT = Number(process.env.PORT || 4001);
@@ -224,7 +224,7 @@ async function action_deleteJobStatus(params) {
 
 async function action_getPayments(params) {
   await requireSession(params);
-  const rows = withInstallmentNumbers(await store.loadPayments());
+  const rows = await store.loadPayments();
   return paginateAndSort(rows, {
     search: params.search, searchFields: ['Payment ID', 'Student ID', 'Student Name', 'Payment Method'],
     filterFn: buildDateCourseFilter(params, 'Payment Date'),
@@ -247,13 +247,14 @@ async function action_savePayment(params) {
     const student = await store.findStudentById(data['Student ID'], conn);
     if (!student) throw new AppError('NOT_FOUND', `No student found with ID ${data['Student ID']}.`);
 
-    const existingSum = await store.sumPaymentsForStudent(conn, data['Student ID'], null);
+    const { sum: existingSum, count: existingCount } = await store.sumPaymentsForStudent(conn, data['Student ID'], null);
     const pending = round2(totalFee - (existingSum + received));
     if (pending < 0) throw new AppError('OVERPAYMENT', `This payment exceeds the pending amount. Maximum allowed right now: ${round2(totalFee - existingSum)}.`);
 
     const row = {
       'Payment ID': await store.nextPaymentId(conn),
       'Student ID': student['Student ID'], 'Student Name': student['Student Name'], 'Course': student['Course'],
+      'Installment No': existingCount + 1,
       'Job Offer Date': data['Job Offer Date'] || '', 'Total Course Fee': totalFee,
       'Payment Received': received, 'Payment Method': data['Payment Method'],
       'Pending Amount': pending, 'Payment Date': data['Payment Date'] || todayISO(),
@@ -279,7 +280,7 @@ async function action_updatePayment(params) {
     const studentId = await store.getStudentIdForPaymentRow(conn, rowId);
     if (!studentId) throw new AppError('NOT_FOUND', 'Payment record not found.');
 
-    const otherSum = await store.sumPaymentsForStudent(conn, studentId, rowId);
+    const { sum: otherSum } = await store.sumPaymentsForStudent(conn, studentId, rowId);
     const pending = round2(totalFee - (otherSum + received));
     if (pending < 0) throw new AppError('OVERPAYMENT', `This payment exceeds the pending amount. Maximum allowed right now: ${round2(totalFee - otherSum)}.`);
 

@@ -385,27 +385,16 @@ function validatePaymentMethod(method) {
 }
 
 function sumPaymentsForStudent(studentId, excludeRow) {
-  return round2(db.payments
-    .filter(p => p['Student ID'] === studentId && p._row !== excludeRow)
-    .reduce((sum, p) => sum + (Number(p['Payment Received']) || 0), 0));
-}
-
-/** Numbers each student's payments 1, 2, 3... in chronological (CreatedAt) order, regardless of display sort/pagination. */
-function withInstallmentNumbers(rows) {
-  const sorted = [...rows].sort((a, b) => String(a['CreatedAt'] || '') < String(b['CreatedAt'] || '') ? -1 : 1);
-  const counters = {};
-  const numberByRow = new Map();
-  sorted.forEach(row => {
-    const id = row['Student ID'];
-    counters[id] = (counters[id] || 0) + 1;
-    numberByRow.set(row, counters[id]);
-  });
-  return rows.map(row => Object.assign({}, row, { 'Installment No': numberByRow.get(row) }));
+  const matches = db.payments.filter(p => p['Student ID'] === studentId);
+  const sum = matches
+    .filter(p => p._row !== excludeRow)
+    .reduce((total, p) => total + (Number(p['Payment Received']) || 0), 0);
+  return { sum: round2(sum), count: matches.length };
 }
 
 function action_getPayments(params) {
   requireSession(params);
-  return paginateAndSort(withInstallmentNumbers(db.payments), {
+  return paginateAndSort(db.payments, {
     search: params.search, searchFields: ['Payment ID', 'Student ID', 'Student Name', 'Payment Method'],
     filterFn: buildDateCourseFilter(params, 'Payment Date'),
     sortBy: params.sortBy || 'CreatedAt', sortDir: params.sortDir || 'desc', page: params.page, pageSize: params.pageSize
@@ -426,7 +415,7 @@ function action_savePayment(params) {
   const student = getStudentById(data['Student ID']);
   if (!student) throw new AppError('NOT_FOUND', `No student found with ID ${data['Student ID']}.`);
 
-  const existingSum = sumPaymentsForStudent(data['Student ID'], null);
+  const { sum: existingSum, count: existingCount } = sumPaymentsForStudent(data['Student ID'], null);
   const pending = round2(totalFee - (existingSum + received));
   if (pending < 0) throw new AppError('OVERPAYMENT', `This payment exceeds the pending amount. Maximum allowed right now: ${round2(totalFee - existingSum)}.`);
 
@@ -434,6 +423,7 @@ function action_savePayment(params) {
     _row: counters.paymentRow++,
     'Payment ID': 'PMT' + String(++counters.paymentSeq).padStart(6, '0'),
     'Student ID': student['Student ID'], 'Student Name': student['Student Name'], 'Course': student['Course'],
+    'Installment No': existingCount + 1,
     'Job Offer Date': data['Job Offer Date'] || '', 'Total Course Fee': totalFee,
     'Payment Received': received, 'Payment Method': data['Payment Method'],
     'Pending Amount': pending, 'Payment Date': data['Payment Date'] || todayISO(),
@@ -457,7 +447,7 @@ function action_updatePayment(params) {
   const payment = db.payments.find(p => p._row === Number(data['_row']));
   if (!payment) throw new AppError('NOT_FOUND', 'Payment record not found.');
 
-  const otherSum = sumPaymentsForStudent(payment['Student ID'], payment._row);
+  const { sum: otherSum } = sumPaymentsForStudent(payment['Student ID'], payment._row);
   const pending = round2(totalFee - (otherSum + received));
   if (pending < 0) throw new AppError('OVERPAYMENT', `This payment exceeds the pending amount. Maximum allowed right now: ${round2(totalFee - otherSum)}.`);
 
@@ -630,6 +620,7 @@ function seed() {
         _row: counters.paymentRow++,
         'Payment ID': 'PMT' + String(++counters.paymentSeq).padStart(6, '0'),
         'Student ID': student['Student ID'], 'Student Name': student['Student Name'], 'Course': student['Course'],
+        'Installment No': 1,
         'Job Offer Date': '', 'Total Course Fee': fee, 'Payment Received': received,
         'Payment Method': PAYMENT_METHODS[i % PAYMENT_METHODS.length],
         'Pending Amount': round2(fee - received), 'Payment Date': enquiryDate, 'CreatedAt': createdAt

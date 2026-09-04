@@ -77,6 +77,7 @@ CREATE TABLE IF NOT EXISTS payments (
   student_id         VARCHAR(20) NOT NULL,
   student_name       VARCHAR(150) NOT NULL,
   course             VARCHAR(100) NOT NULL DEFAULT '',
+  installment_no     INT NOT NULL DEFAULT 1,
   job_offer_date     VARCHAR(20) NOT NULL DEFAULT '',
   total_course_fee   DECIMAL(12,2) NOT NULL,
   payment_received   DECIMAL(12,2) NOT NULL,

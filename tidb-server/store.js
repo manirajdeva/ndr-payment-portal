@@ -25,9 +25,9 @@ const JOB_COLS = {
 };
 const PAYMENT_COLS = {
   'Payment ID': 'payment_id', 'Student ID': 'student_id', 'Student Name': 'student_name', 'Course': 'course',
-  'Job Offer Date': 'job_offer_date', 'Total Course Fee': 'total_course_fee', 'Payment Received': 'payment_received',
-  'Payment Method': 'payment_method', 'Pending Amount': 'pending_amount', 'Payment Date': 'payment_date',
-  'CreatedAt': 'created_at'
+  'Installment No': 'installment_no', 'Job Offer Date': 'job_offer_date', 'Total Course Fee': 'total_course_fee',
+  'Payment Received': 'payment_received', 'Payment Method': 'payment_method', 'Pending Amount': 'pending_amount',
+  'Payment Date': 'payment_date', 'CreatedAt': 'created_at'
 };
 
 function toDisplay(dbRow, colMap, withRowId) {
@@ -157,7 +157,7 @@ async function deletePaymentRow(rowId) {
   return result.affectedRows;
 }
 
-/** Locks every payment row for the student (SELECT ... FOR UPDATE) so a concurrent insert can't race past the overpayment check — the SQL equivalent of apps-script's LockService. Caller must be inside a transaction. */
+/** Locks every payment row for the student (SELECT ... FOR UPDATE) so a concurrent insert can't race past the overpayment check — the SQL equivalent of apps-script's LockService. Caller must be inside a transaction. Returns both the paid-so-far sum (excluding excludeRowId, for edits) and the total row count (for the next installment number). */
 async function sumPaymentsForStudent(conn, studentId, excludeRowId) {
   const [rows] = await conn.query(
     'SELECT id, payment_received FROM payments WHERE student_id = ? FOR UPDATE', [studentId]
@@ -165,7 +165,7 @@ async function sumPaymentsForStudent(conn, studentId, excludeRowId) {
   const sum = rows
     .filter(r => r.id !== excludeRowId)
     .reduce((acc, r) => acc + (Number(r.payment_received) || 0), 0);
-  return round2(sum);
+  return { sum: round2(sum), count: rows.length };
 }
 
 async function getStudentIdForPaymentRow(conn, rowId) {

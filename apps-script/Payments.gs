@@ -9,27 +9,10 @@ var PAYMENT_METHODS = [
   'Cash', 'UPI', 'Google Pay', 'PhonePe', 'Bank Transfer', 'Credit Card', 'Debit Card'
 ];
 
-/** Numbers each student's payments 1, 2, 3... in chronological (CreatedAt) order, regardless of display sort/pagination. */
-function withInstallmentNumbers_(rows) {
-  var sorted = rows.slice().sort(function (a, b) {
-    return String(a['CreatedAt'] || '') < String(b['CreatedAt'] || '') ? -1 : 1;
-  });
-  var counters = {};
-  var numberByRow = new Map();
-  sorted.forEach(function (row) {
-    var id = row['Student ID'];
-    counters[id] = (counters[id] || 0) + 1;
-    numberByRow.set(row, counters[id]);
-  });
-  return rows.map(function (row) {
-    return Object.assign({}, row, { 'Installment No': numberByRow.get(row) });
-  });
-}
-
 function action_getPayments(params) {
   requireSession_(params);
   var sheet = getSheet_(SHEET_NAMES.PAYMENTS);
-  var rows = withInstallmentNumbers_(readAllRows_(sheet));
+  var rows = readAllRows_(sheet);
   var result = paginateAndSort_(rows, {
     search: params.search,
     searchFields: ['Payment ID', 'Student ID', 'Student Name', 'Payment Method'],
@@ -63,7 +46,8 @@ function action_savePayment(params) {
 
     var sheet = getSheet_(SHEET_NAMES.PAYMENTS);
     var sheetData = getSheetData_(sheet);
-    var existingSum = sumPaymentsForStudent_(sheetData, data['Student ID'], null);
+    var summary = sumPaymentsForStudent_(sheetData, data['Student ID'], null);
+    var existingSum = summary.sum;
     var pending = round2_(totalFee - (existingSum + received));
     if (pending < 0) {
       throw new AppError_('OVERPAYMENT', 'This payment exceeds the pending amount. Maximum allowed right now: ' + round2_(totalFee - existingSum) + '.');
@@ -75,6 +59,7 @@ function action_savePayment(params) {
       'Student ID': student['Student ID'],
       'Student Name': student['Student Name'],
       'Course': student['Course'],
+      'Installment No': summary.count + 1,
       'Job Offer Date': data['Job Offer Date'] || '',
       'Total Course Fee': totalFee,
       'Payment Received': received,
@@ -113,7 +98,7 @@ function action_updatePayment(params) {
     var studentIdCol = sheetData.headers.indexOf('Student ID');
     var studentId = sheetData.dataRows[rowIndex - 2][studentIdCol];
 
-    var otherSum = sumPaymentsForStudent_(sheetData, studentId, rowIndex);
+    var otherSum = sumPaymentsForStudent_(sheetData, studentId, rowIndex).sum;
     var pending = round2_(totalFee - (otherSum + received));
     if (pending < 0) {
       throw new AppError_('OVERPAYMENT', 'This payment exceeds the pending amount. Maximum allowed right now: ' + round2_(totalFee - otherSum) + '.');
@@ -152,19 +137,21 @@ function action_deletePayment(params) {
   }
 }
 
-/** `sheetData` is { headers, dataRows } from getSheetData_ — no sheet access here, pure in-memory. */
+/** `sheetData` is { headers, dataRows } from getSheetData_ — no sheet access here, pure in-memory. Returns both the paid-so-far sum (excluding excludeRowIndex, for edits) and the total row count (for the next installment number). */
 function sumPaymentsForStudent_(sheetData, studentId, excludeRowIndex) {
   var idCol = sheetData.headers.indexOf('Student ID');
   var receivedCol = sheetData.headers.indexOf('Payment Received');
   var sum = 0;
+  var count = 0;
   for (var i = 0; i < sheetData.dataRows.length; i++) {
     var actualRow = i + 2;
-    if (excludeRowIndex && actualRow === excludeRowIndex) continue;
     if (String(sheetData.dataRows[i][idCol]).trim() === String(studentId).trim()) {
+      count++;
+      if (excludeRowIndex && actualRow === excludeRowIndex) continue;
       sum += Number(sheetData.dataRows[i][receivedCol]) || 0;
     }
   }
-  return round2_(sum);
+  return { sum: round2_(sum), count: count };
 }
 
 function validatePaymentMethod_(method) {

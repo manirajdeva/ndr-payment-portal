@@ -95,19 +95,6 @@ function paginateAndSort(rows, params) {
   };
 }
 
-/** Numbers each student's payments 1, 2, 3... in chronological (CreatedAt) order, regardless of display sort/pagination. */
-function withInstallmentNumbers(rows) {
-  const sorted = [...rows].sort((a, b) => String(a['CreatedAt'] || '') < String(b['CreatedAt'] || '') ? -1 : 1);
-  const counters = {};
-  const numberByRow = new Map();
-  sorted.forEach(row => {
-    const id = row['Student ID'];
-    counters[id] = (counters[id] || 0) + 1;
-    numberByRow.set(row, counters[id]);
-  });
-  return rows.map(row => Object.assign({}, row, { 'Installment No': numberByRow.get(row) }));
-}
-
 function last6Months() {
   const months = [];
   const d = new Date();
@@ -152,5 +139,5 @@ module.exports = {
   JOB_STATUS_OPTIONS, PAYMENT_METHODS, QUALIFICATION_OPTIONS, COURSE_OPTIONS,
   todayISO, nowIso, round2, monthKey, isBlank, requireFields, isValidEmail, isValidMobile,
   validateCourseValue, validateQualificationValue, validateJobStatusValue, validatePaymentMethod,
-  buildDateCourseFilter, paginateAndSort, withInstallmentNumbers, last6Months, monthlySeries, latestPerStudent, hashPassword
+  buildDateCourseFilter, paginateAndSort, last6Months, monthlySeries, latestPerStudent, hashPassword
 };
