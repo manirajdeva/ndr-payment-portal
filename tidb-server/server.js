@@ -18,7 +18,7 @@ const {
   AppError, JOB_STATUS_OPTIONS, PAYMENT_METHODS, COURSE_OPTIONS,
   todayISO, nowIso, round2, monthKey, requireFields, isValidEmail, isValidMobile,
   validateCourseValue, validateQualificationValue, validateJobStatusValue, validatePaymentMethod,
-  buildDateCourseFilter, paginateAndSort, monthlySeries, latestPerStudent, hashPassword, isBlank
+  buildDateCourseFilter, paginateAndSort, withInstallmentNumbers, monthlySeries, latestPerStudent, hashPassword, isBlank
 } = require('./logic');
 
 const PORT = Number(process.env.PORT || 4001);
@@ -224,7 +224,7 @@ async function action_deleteJobStatus(params) {
 
 async function action_getPayments(params) {
   await requireSession(params);
-  const rows = await store.loadPayments();
+  const rows = withInstallmentNumbers(await store.loadPayments());
   return paginateAndSort(rows, {
     search: params.search, searchFields: ['Payment ID', 'Student ID', 'Student Name', 'Payment Method'],
     filterFn: buildDateCourseFilter(params, 'Payment Date'),

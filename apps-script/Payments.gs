@@ -9,10 +9,27 @@ var PAYMENT_METHODS = [
   'Cash', 'UPI', 'Google Pay', 'PhonePe', 'Bank Transfer', 'Credit Card', 'Debit Card'
 ];
 
+/** Numbers each student's payments 1, 2, 3... in chronological (CreatedAt) order, regardless of display sort/pagination. */
+function withInstallmentNumbers_(rows) {
+  var sorted = rows.slice().sort(function (a, b) {
+    return String(a['CreatedAt'] || '') < String(b['CreatedAt'] || '') ? -1 : 1;
+  });
+  var counters = {};
+  var numberByRow = new Map();
+  sorted.forEach(function (row) {
+    var id = row['Student ID'];
+    counters[id] = (counters[id] || 0) + 1;
+    numberByRow.set(row, counters[id]);
+  });
+  return rows.map(function (row) {
+    return Object.assign({}, row, { 'Installment No': numberByRow.get(row) });
+  });
+}
+
 function action_getPayments(params) {
   requireSession_(params);
   var sheet = getSheet_(SHEET_NAMES.PAYMENTS);
-  var rows = readAllRows_(sheet);
+  var rows = withInstallmentNumbers_(readAllRows_(sheet));
   var result = paginateAndSort_(rows, {
     search: params.search,
     searchFields: ['Payment ID', 'Student ID', 'Student Name', 'Payment Method'],

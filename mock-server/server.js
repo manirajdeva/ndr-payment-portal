@@ -390,9 +390,22 @@ function sumPaymentsForStudent(studentId, excludeRow) {
     .reduce((sum, p) => sum + (Number(p['Payment Received']) || 0), 0));
 }
 
+/** Numbers each student's payments 1, 2, 3... in chronological (CreatedAt) order, regardless of display sort/pagination. */
+function withInstallmentNumbers(rows) {
+  const sorted = [...rows].sort((a, b) => String(a['CreatedAt'] || '') < String(b['CreatedAt'] || '') ? -1 : 1);
+  const counters = {};
+  const numberByRow = new Map();
+  sorted.forEach(row => {
+    const id = row['Student ID'];
+    counters[id] = (counters[id] || 0) + 1;
+    numberByRow.set(row, counters[id]);
+  });
+  return rows.map(row => Object.assign({}, row, { 'Installment No': numberByRow.get(row) }));
+}
+
 function action_getPayments(params) {
   requireSession(params);
-  return paginateAndSort(db.payments, {
+  return paginateAndSort(withInstallmentNumbers(db.payments), {
     search: params.search, searchFields: ['Payment ID', 'Student ID', 'Student Name', 'Payment Method'],
     filterFn: buildDateCourseFilter(params, 'Payment Date'),
     sortBy: params.sortBy || 'CreatedAt', sortDir: params.sortDir || 'desc', page: params.page, pageSize: params.pageSize

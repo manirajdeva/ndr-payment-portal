@@ -24,6 +24,7 @@ const Payments = (() => {
     { key: 'Student ID', label: 'Student ID' },
     { key: 'Student Name', label: 'Student Name' },
     { key: 'Course', label: 'Course' },
+    { key: 'Installment No', label: 'Installment No' },
     { key: 'Job Offer Date', label: 'Job Offer Date' },
     { key: 'Total Course Fee', label: 'Total Course Fee' },
     { key: 'Payment Received', label: 'Payment Received' },
@@ -61,7 +62,7 @@ const Payments = (() => {
   function renderTable(rows) {
     const tbody = document.getElementById('payTableBody');
     if (!rows.length) {
-      tbody.innerHTML = `<tr><td colspan="10" class="text-center text-muted py-4">No payment records found.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="11" class="text-center text-muted py-4">No payment records found.</td></tr>`;
       return;
     }
     tbody.innerHTML = rows.map(row => {
@@ -73,6 +74,7 @@ const Payments = (() => {
         <td><span class="fw-semibold text-primary">${Utils.escapeHtml(row['Student ID'])}</span></td>
         <td>${Utils.escapeHtml(row['Student Name'])}</td>
         <td>${Utils.escapeHtml(row['Course'])}</td>
+        <td>${row['_pending'] ? '' : Utils.escapeHtml(row['Installment No'])}</td>
         <td>${Utils.formatCurrency(row['Total Course Fee'])}</td>
         <td>${Utils.formatCurrency(row['Payment Received'])}</td>
         <td class="${pendingClass} fw-semibold">${Utils.formatCurrency(pending)}</td>
