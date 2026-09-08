@@ -122,7 +122,9 @@ const Api = (() => {
     listUsers: () => call('listUsers'),
     addUser: (data) => call('addUser', { data }),
     updateUser: (data) => call('updateUser', { data }),
-    deleteUser: (id) => call('deleteUser', { data: { id } })
+    deleteUser: (id) => call('deleteUser', { data: { id } }),
+
+    getAuditLog: (opts) => call('getAuditLog', opts)
   };
 })();
 

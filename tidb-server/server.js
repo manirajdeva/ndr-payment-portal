@@ -74,6 +74,11 @@ const CREATOR_ROLES = ['employee', 'hr'];
 /** Roles a user account may be assigned in the UI. */
 const USER_ROLES = ['admin', 'employee'];
 
+/** The { username, role } recorded as the actor on every audit-log row. */
+function actorOf(session) {
+  return { username: session.username, role: session.role };
+}
+
 /* ---------------- Students (Module 1) ---------------- */
 
 async function action_generateStudentID() {
@@ -103,7 +108,7 @@ async function action_searchStudent(params) {
 }
 
 async function action_addStudent(params) {
-  await requireRole(params, CREATOR_ROLES);
+  const session = await requireRole(params, CREATOR_ROLES);
   const data = params.data || {};
   requireFields(data, ['Student Name', 'Course', 'Gmail', 'Mobile Number']);
   if (!isValidEmail(data['Gmail'])) throw new AppError('VALIDATION_ERROR', 'Please enter a valid email address.');
@@ -125,12 +130,12 @@ async function action_addStudent(params) {
       'Mobile Number': String(data['Mobile Number']).trim(),
       'CreatedAt': now, 'UpdatedAt': now
     };
-    return store.insertStudent(conn, row);
+    return store.insertStudent(conn, row, actorOf(session));
   }).catch(rethrowDuplicateKey);
 }
 
 async function action_updateStudent(params) {
-  await requireAdmin(params);
+  const session = await requireAdmin(params);
   const data = params.data || {};
   requireFields(data, ['Student ID', 'Student Name', 'Course', 'Gmail', 'Mobile Number']);
   if (!isValidEmail(data['Gmail'])) throw new AppError('VALIDATION_ERROR', 'Please enter a valid email address.');
@@ -153,17 +158,17 @@ async function action_updateStudent(params) {
       'Mobile Number': String(data['Mobile Number']).trim(),
       'UpdatedAt': nowIso()
     };
-    await store.updateStudentRow(conn, data['Student ID'], update);
+    await store.updateStudentRow(conn, data['Student ID'], update, actorOf(session), existing);
     await store.syncStudentNameEverywhere(conn, data['Student ID'], update['Student Name'], update['Course']);
     return Object.assign({ 'Student ID': data['Student ID'] }, update);
   }).catch(rethrowDuplicateKey);
 }
 
 async function action_deleteStudent(params) {
-  await requireAdmin(params);
+  const session = await requireAdmin(params);
   const studentId = params.data && params.data['Student ID'];
   if (isBlank(studentId)) throw new AppError('VALIDATION_ERROR', 'Student ID is required.');
-  const affected = await store.deleteStudentRow(studentId);
+  const affected = await store.deleteStudentRow(studentId, actorOf(session));
   if (!affected) throw new AppError('NOT_FOUND', 'Student not found.');
   return { deleted: true, studentId };
 }
@@ -181,7 +186,7 @@ async function action_getJobStatus(params) {
 }
 
 async function action_saveJobStatus(params) {
-  await requireRole(params, CREATOR_ROLES);
+  const session = await requireRole(params, CREATOR_ROLES);
   const data = params.data || {};
   requireFields(data, ['Student ID', 'Job Status']);
   validateJobStatusValue(data['Job Status']);
@@ -197,12 +202,12 @@ async function action_saveJobStatus(params) {
       'Course': student['Course'], 'Organization': data['Organization'] || '',
       'Job Joining Date': data['Job Joining Date'] || '', 'CreatedAt': now, 'UpdatedAt': now
     };
-    return store.insertJob(conn, row);
+    return store.insertJob(conn, row, actorOf(session));
   });
 }
 
 async function action_updateJobStatus(params) {
-  await requireAdmin(params);
+  const session = await requireAdmin(params);
   const data = params.data || {};
   requireFields(data, ['_row', 'Job Status']);
   validateJobStatusValue(data['Job Status']);
@@ -212,15 +217,15 @@ async function action_updateJobStatus(params) {
     'Organization': data['Organization'] || '', 'Job Joining Date': data['Job Joining Date'] || '',
     'UpdatedAt': nowIso()
   };
-  const affected = await store.withTransaction(conn => store.updateJobRow(conn, Number(data['_row']), update));
+  const affected = await store.withTransaction(conn => store.updateJobRow(conn, Number(data['_row']), update, actorOf(session)));
   if (!affected) throw new AppError('NOT_FOUND', 'Job status record not found.');
   return update;
 }
 
 async function action_deleteJobStatus(params) {
-  await requireAdmin(params);
+  const session = await requireAdmin(params);
   const rowId = Number(params.data && params.data['_row']);
-  const affected = await store.deleteJobRow(rowId);
+  const affected = await store.deleteJobRow(rowId, actorOf(session));
   if (!affected) throw new AppError('NOT_FOUND', 'Job status record not found.');
   return { deleted: true };
 }
@@ -239,7 +244,7 @@ async function action_getPayments(params) {
 }
 
 async function action_savePayment(params) {
-  await requireAdmin(params);
+  const session = await requireAdmin(params);
   const data = params.data || {};
   requireFields(data, ['Student ID', 'Total Course Fee', 'Payment Received', 'Payment Method']);
   validatePaymentMethod(data['Payment Method']);
@@ -266,12 +271,12 @@ async function action_savePayment(params) {
       'Pending Amount': pending, 'Payment Date': data['Payment Date'] || todayISO(),
       'CreatedAt': nowIso()
     };
-    return store.insertPayment(conn, row);
+    return store.insertPayment(conn, row, actorOf(session));
   });
 }
 
 async function action_updatePayment(params) {
-  await requireAdmin(params);
+  const session = await requireAdmin(params);
   const data = params.data || {};
   requireFields(data, ['_row', 'Total Course Fee', 'Payment Received', 'Payment Method']);
   validatePaymentMethod(data['Payment Method']);
@@ -295,15 +300,15 @@ async function action_updatePayment(params) {
       'Payment Received': received, 'Payment Method': data['Payment Method'],
       'Pending Amount': pending, 'Payment Date': data['Payment Date'] || todayISO()
     };
-    await store.updatePaymentRow(conn, rowId, update);
+    await store.updatePaymentRow(conn, rowId, update, actorOf(session));
     return update;
   });
 }
 
 async function action_deletePayment(params) {
-  await requireAdmin(params);
+  const session = await requireAdmin(params);
   const rowId = Number(params.data && params.data['_row']);
-  const affected = await store.deletePaymentRow(rowId);
+  const affected = await store.deletePaymentRow(rowId, actorOf(session));
   if (!affected) throw new AppError('NOT_FOUND', 'Payment record not found.');
   return { deleted: true };
 }
@@ -416,6 +421,24 @@ async function action_reports(params) {
   return { rows, total: rows.length };
 }
 
+/* ---------------- Audit log (admin only) ---------------- */
+
+const AUDIT_ENTITIES = ['students', 'jobs', 'payments'];
+
+async function action_getAuditLog(params) {
+  await requireAdmin(params);
+  const entity = String(params.entity || '').trim();
+  if (!AUDIT_ENTITIES.includes(entity)) {
+    throw new AppError('VALIDATION_ERROR', 'entity must be one of: students, jobs, payments.');
+  }
+  const rows = await store.loadAuditLog(entity, { studentId: params.studentId, recordKey: params.recordKey });
+  return paginateAndSort(rows, {
+    search: params.search, searchFields: ['actor', 'action', 'recordKey', 'studentId'],
+    sortBy: params.sortBy || 'id', sortDir: params.sortDir || 'desc',
+    page: params.page, pageSize: params.pageSize
+  });
+}
+
 /* ---------------- Users (admin only) ---------------- */
 
 async function action_listUsers(params) {
@@ -507,7 +530,8 @@ const ACTIONS = {
   getJobStatus: action_getJobStatus, saveJobStatus: action_saveJobStatus, updateJobStatus: action_updateJobStatus, deleteJobStatus: action_deleteJobStatus,
   getPayments: action_getPayments, savePayment: action_savePayment, updatePayment: action_updatePayment, deletePayment: action_deletePayment,
   dashboardStats: action_dashboardStats, reports: action_reports,
-  listUsers: action_listUsers, addUser: action_addUser, updateUser: action_updateUser, deleteUser: action_deleteUser
+  listUsers: action_listUsers, addUser: action_addUser, updateUser: action_updateUser, deleteUser: action_deleteUser,
+  getAuditLog: action_getAuditLog
 };
 
 const app = express();
@@ -541,6 +565,15 @@ app.post('/exec', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`NDR EDTECH TiDB API running on port ${PORT}`);
-});
+// Make sure every table in schema.sql exists (incl. the audit-log tables)
+// before serving, so a deploy needs no separate migration step. If TiDB is
+// briefly unreachable at boot we still start listening — individual
+// requests will surface the DB error until it recovers, same as before.
+store.ensureSchema()
+  .then(() => console.log('Schema ensured (schema.sql applied).'))
+  .catch(err => console.error('Schema ensure failed, continuing:', err.message))
+  .finally(() => {
+    app.listen(PORT, () => {
+      console.log(`NDR EDTECH TiDB API running on port ${PORT}`);
+    });
+  });

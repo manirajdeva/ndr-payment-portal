@@ -10,6 +10,8 @@
  * of thousands of rows, push the WHERE/ORDER BY/LIMIT down into SQL instead.
  */
 
+const fs = require('fs');
+const path = require('path');
 const { pool, withTransaction } = require('./db');
 const { round2, nowIso } = require('./logic');
 
@@ -44,6 +46,70 @@ function insertStatement(table, colMap, row, extra = {}) {
   return { sql: `INSERT INTO ${table} (${columns.join(', ')}) VALUES (${placeholders})`, values };
 }
 
+/* ---------------- Audit / history log ---------------- */
+
+// entity -> log table. The value is a fixed literal, never request input,
+// so interpolating it into the INSERT below is safe.
+const LOG_TABLE = { students: 'students_log', jobs: 'jobs_log', payments: 'payments_log' };
+
+/**
+ * Appends one audit row for a change to students / jobs / payments. MUST be
+ * called on the same `conn` (transaction) as the change itself, so the two
+ * commit or roll back together — an audit trail with silent gaps is worse
+ * than none. `actor` is { username, role } from the caller's session.
+ */
+async function logChange(conn, entity, { recordKey, studentId, action, actor, before, after }) {
+  const table = LOG_TABLE[entity];
+  if (!table) throw new Error(`logChange: unknown entity "${entity}"`);
+  await conn.query(
+    `INSERT INTO ${table}
+       (record_key, student_id, action, actor, actor_role, data_before, data_after, changed_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      String(recordKey),
+      studentId != null ? String(studentId) : '',
+      action,
+      (actor && actor.username) || 'unknown',
+      (actor && actor.role) || '',
+      before != null ? JSON.stringify(before) : null,
+      after != null ? JSON.stringify(after) : null,
+      nowIso()
+    ]
+  );
+}
+
+function auditToDisplay(row) {
+  return {
+    id: row.id, recordKey: row.record_key, studentId: row.student_id,
+    action: row.action, actor: row.actor, actorRole: row.actor_role,
+    dataBefore: row.data_before, dataAfter: row.data_after, changedAt: row.changed_at
+  };
+}
+
+/** Reads an audit-log table, newest first, optionally filtered by student or by the changed row's own key. */
+async function loadAuditLog(entity, { studentId, recordKey } = {}) {
+  const table = LOG_TABLE[entity];
+  if (!table) throw new Error(`loadAuditLog: unknown entity "${entity}"`);
+  const where = [];
+  const vals = [];
+  if (studentId) { where.push('student_id = ?'); vals.push(String(studentId)); }
+  if (recordKey) { where.push('record_key = ?'); vals.push(String(recordKey)); }
+  const sql = `SELECT * FROM ${table}${where.length ? ' WHERE ' + where.join(' AND ') : ''} ORDER BY id DESC`;
+  const [rows] = await pool.query(sql, vals);
+  return rows.map(auditToDisplay);
+}
+
+/**
+ * Runs schema.sql (every statement is CREATE TABLE IF NOT EXISTS, so this
+ * is idempotent). Called once on server startup so a fresh deploy — new
+ * audit-log tables included — needs no manual migration step.
+ */
+async function ensureSchema() {
+  const sql = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
+  const statements = sql.split(/;\s*(?:\r?\n|$)/).map(s => s.trim()).filter(Boolean);
+  for (const statement of statements) await pool.query(statement);
+}
+
 /* ---------------- Students ---------------- */
 
 async function loadStudents() {
@@ -74,23 +140,40 @@ async function assertNoDuplicateStudent(conn, data, excludeStudentId) {
   if (rows.length) throw new AppError('DUPLICATE_EMAIL', `A student with this email already exists (${rows[0].student_id}).`);
 }
 
-async function insertStudent(conn, row) {
+async function insertStudent(conn, row, actor) {
   const { sql, values } = insertStatement('students', STUDENT_COLS, row);
   await conn.query(sql, values);
+  await logChange(conn, 'students', {
+    recordKey: row['Student ID'], studentId: row['Student ID'], action: 'INSERT', actor, after: row
+  });
   return row;
 }
 
-async function updateStudentRow(conn, studentId, update) {
+async function updateStudentRow(conn, studentId, update, actor, before) {
   const sets = Object.entries(STUDENT_COLS).filter(([k]) => k in update);
   const sql = `UPDATE students SET ${sets.map(([, col]) => `${col} = ?`).join(', ')} WHERE student_id = ?`;
   const values = sets.map(([k]) => update[k]).concat([studentId]);
   const [result] = await conn.query(sql, values);
+  if (result.affectedRows) {
+    await logChange(conn, 'students', {
+      recordKey: studentId, studentId, action: 'UPDATE', actor,
+      before: before || null,
+      after: Object.assign({}, before, update, { 'Student ID': studentId })
+    });
+  }
   return result.affectedRows;
 }
 
-async function deleteStudentRow(studentId) {
-  const [result] = await pool.query('DELETE FROM students WHERE student_id = ?', [studentId]);
-  return result.affectedRows;
+async function deleteStudentRow(studentId, actor) {
+  return withTransaction(async conn => {
+    const [rows] = await conn.query('SELECT * FROM students WHERE student_id = ? FOR UPDATE', [studentId]);
+    const before = rows.length ? toDisplay(rows[0], STUDENT_COLS) : null;
+    const [result] = await conn.query('DELETE FROM students WHERE student_id = ?', [studentId]);
+    if (result.affectedRows) {
+      await logChange(conn, 'students', { recordKey: studentId, studentId, action: 'DELETE', actor, before });
+    }
+    return result.affectedRows;
+  });
 }
 
 /** Keeps Student Name/Course consistent in Job Status + Payments if edited later (mirrors apps-script). */
@@ -110,24 +193,46 @@ async function loadJobs() {
   return rows.map(r => toDisplay(r, JOB_COLS, true));
 }
 
-async function insertJob(conn, row) {
+async function insertJob(conn, row, actor) {
   const { sql, values } = insertStatement('jobs', JOB_COLS, row);
   const [result] = await conn.query(sql, values);
-  return { ...row, _row: result.insertId };
+  const saved = { ...row, _row: result.insertId };
+  await logChange(conn, 'jobs', {
+    recordKey: result.insertId, studentId: row['Student ID'], action: 'INSERT', actor, after: saved
+  });
+  return saved;
 }
 
-async function updateJobRow(conn, rowId, update) {
+async function updateJobRow(conn, rowId, update, actor) {
+  const [beforeRows] = await conn.query('SELECT * FROM jobs WHERE id = ? FOR UPDATE', [rowId]);
+  const before = beforeRows.length ? toDisplay(beforeRows[0], JOB_COLS, true) : null;
+
   const fields = ['Office Joining Date', 'Job Status', 'Organization', 'Job Joining Date', 'UpdatedAt'];
   const sets = fields.filter(k => k in update);
   const sql = `UPDATE jobs SET ${sets.map(k => `${JOB_COLS[k]} = ?`).join(', ')} WHERE id = ?`;
   const values = sets.map(k => update[k]).concat([rowId]);
   const [result] = await conn.query(sql, values);
+  if (result.affectedRows && before) {
+    await logChange(conn, 'jobs', {
+      recordKey: rowId, studentId: before['Student ID'], action: 'UPDATE', actor,
+      before, after: Object.assign({}, before, update)
+    });
+  }
   return result.affectedRows;
 }
 
-async function deleteJobRow(rowId) {
-  const [result] = await pool.query('DELETE FROM jobs WHERE id = ?', [rowId]);
-  return result.affectedRows;
+async function deleteJobRow(rowId, actor) {
+  return withTransaction(async conn => {
+    const [rows] = await conn.query('SELECT * FROM jobs WHERE id = ? FOR UPDATE', [rowId]);
+    const before = rows.length ? toDisplay(rows[0], JOB_COLS, true) : null;
+    const [result] = await conn.query('DELETE FROM jobs WHERE id = ?', [rowId]);
+    if (result.affectedRows) {
+      await logChange(conn, 'jobs', {
+        recordKey: rowId, studentId: before ? before['Student ID'] : '', action: 'DELETE', actor, before
+      });
+    }
+    return result.affectedRows;
+  });
 }
 
 /* ---------------- Payments ---------------- */
@@ -137,24 +242,47 @@ async function loadPayments() {
   return rows.map(r => toDisplay(r, PAYMENT_COLS, true));
 }
 
-async function insertPayment(conn, row) {
+async function insertPayment(conn, row, actor) {
   const { sql, values } = insertStatement('payments', PAYMENT_COLS, row);
   const [result] = await conn.query(sql, values);
-  return { ...row, _row: result.insertId };
+  const saved = { ...row, _row: result.insertId };
+  await logChange(conn, 'payments', {
+    recordKey: row['Payment ID'], studentId: row['Student ID'], action: 'INSERT', actor, after: saved
+  });
+  return saved;
 }
 
-async function updatePaymentRow(conn, rowId, update) {
+async function updatePaymentRow(conn, rowId, update, actor) {
+  const [beforeRows] = await conn.query('SELECT * FROM payments WHERE id = ? FOR UPDATE', [rowId]);
+  const before = beforeRows.length ? toDisplay(beforeRows[0], PAYMENT_COLS, true) : null;
+
   const fields = ['Job Offer Date', 'Total Course Fee', 'Payment Received', 'Payment Method', 'Pending Amount', 'Payment Date'];
   const sets = fields.filter(k => k in update);
   const sql = `UPDATE payments SET ${sets.map(k => `${PAYMENT_COLS[k]} = ?`).join(', ')} WHERE id = ?`;
   const values = sets.map(k => update[k]).concat([rowId]);
   const [result] = await conn.query(sql, values);
+  if (result.affectedRows && before) {
+    await logChange(conn, 'payments', {
+      recordKey: before['Payment ID'], studentId: before['Student ID'], action: 'UPDATE', actor,
+      before, after: Object.assign({}, before, update)
+    });
+  }
   return result.affectedRows;
 }
 
-async function deletePaymentRow(rowId) {
-  const [result] = await pool.query('DELETE FROM payments WHERE id = ?', [rowId]);
-  return result.affectedRows;
+async function deletePaymentRow(rowId, actor) {
+  return withTransaction(async conn => {
+    const [rows] = await conn.query('SELECT * FROM payments WHERE id = ? FOR UPDATE', [rowId]);
+    const before = rows.length ? toDisplay(rows[0], PAYMENT_COLS, true) : null;
+    const [result] = await conn.query('DELETE FROM payments WHERE id = ?', [rowId]);
+    if (result.affectedRows) {
+      await logChange(conn, 'payments', {
+        recordKey: before ? before['Payment ID'] : rowId, studentId: before ? before['Student ID'] : '',
+        action: 'DELETE', actor, before
+      });
+    }
+    return result.affectedRows;
+  });
 }
 
 /** Locks every payment row for the student (SELECT ... FOR UPDATE) so a concurrent insert can't race past the overpayment check — the SQL equivalent of apps-script's LockService. Caller must be inside a transaction. Returns both the paid-so-far sum (excluding excludeRowId, for edits) and the total row count (for the next installment number). */
@@ -266,7 +394,7 @@ async function deleteSession(token) {
 }
 
 module.exports = {
-  withTransaction,
+  withTransaction, ensureSchema, logChange, loadAuditLog,
   loadStudents, findStudentById, assertNoDuplicateStudent, insertStudent, updateStudentRow, deleteStudentRow, syncStudentNameEverywhere,
   loadJobs, insertJob, updateJobRow, deleteJobRow,
   loadPayments, insertPayment, updatePaymentRow, deletePaymentRow, sumPaymentsForStudent, getStudentIdForPaymentRow,

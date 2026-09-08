@@ -43,8 +43,27 @@ const COURSE_OPTIONS = [
 /* ---------------- In-memory store ---------------- */
 
 const db = { students: [], jobs: [], payments: [] };
-const counters = { year: {}, paymentSeq: 0, jobRow: 1000, paymentRow: 2000 };
-const sessions = new Map(); // token -> { username, expiresAt }
+// Append-only audit trail, mirroring tidb-server's *_log tables. One entry
+// per INSERT/UPDATE/DELETE on students/jobs/payments, recording who did it.
+// In-memory only (like the rest of this mock) — cleared on restart.
+const logs = { students: [], jobs: [], payments: [] };
+const counters = { year: {}, paymentSeq: 0, jobRow: 1000, paymentRow: 2000, logSeq: 0 };
+const sessions = new Map(); // token -> { username, role, expiresAt }
+
+/** Records one audit-log entry. `session` is the { username, role } of the caller. */
+function logChange(entity, { recordKey, studentId, action, session, before, after }) {
+  logs[entity].push({
+    id: ++counters.logSeq,
+    record_key: String(recordKey),
+    student_id: studentId != null ? String(studentId) : '',
+    action,
+    actor: (session && session.username) || 'unknown',
+    actor_role: (session && session.role) || '',
+    data_before: before != null ? JSON.parse(JSON.stringify(before)) : null,
+    data_after: after != null ? JSON.parse(JSON.stringify(after)) : null,
+    changed_at: nowIso()
+  });
+}
 
 class AppError extends Error {
   constructor(code, message) { super(message); this.code = code; }
@@ -196,6 +215,30 @@ function requireRole(params, allowedRoles) {
   throw new AppError('FORBIDDEN', 'Your account does not have permission to make changes.');
 }
 
+/* ---------------- Audit log (admin only) ---------------- */
+
+const AUDIT_ENTITIES = ['students', 'jobs', 'payments'];
+
+function action_getAuditLog(params) {
+  requireAdmin(params);
+  const entity = String(params.entity || '').trim();
+  if (!AUDIT_ENTITIES.includes(entity)) {
+    throw new AppError('VALIDATION_ERROR', 'entity must be one of: students, jobs, payments.');
+  }
+  let rows = logs[entity].slice();
+  if (params.studentId) rows = rows.filter(r => r.student_id === String(params.studentId));
+  if (params.recordKey) rows = rows.filter(r => r.record_key === String(params.recordKey));
+  rows = rows.map(r => ({
+    id: r.id, recordKey: r.record_key, studentId: r.student_id, action: r.action,
+    actor: r.actor, actorRole: r.actor_role, dataBefore: r.data_before, dataAfter: r.data_after, changedAt: r.changed_at
+  }));
+  return paginateAndSort(rows, {
+    search: params.search, searchFields: ['actor', 'action', 'recordKey', 'studentId'],
+    sortBy: params.sortBy || 'id', sortDir: params.sortDir || 'desc',
+    page: params.page, pageSize: params.pageSize
+  });
+}
+
 /* ---------------- Users (admin only) ---------------- */
 
 function action_listUsers(params) {
@@ -326,7 +369,7 @@ function action_searchStudent(params) {
 }
 
 function action_addStudent(params) {
-  requireRole(params, CREATOR_ROLES);
+  const session = requireRole(params, CREATOR_ROLES);
   const data = params.data || {};
   requireFields(data, ['Student Name', 'Course', 'Gmail', 'Mobile Number']);
   if (!isValidEmail(data['Gmail'])) throw new AppError('VALIDATION_ERROR', 'Please enter a valid email address.');
@@ -348,11 +391,12 @@ function action_addStudent(params) {
     'CreatedAt': now, 'UpdatedAt': now
   };
   db.students.push(row);
+  logChange('students', { recordKey: row['Student ID'], studentId: row['Student ID'], action: 'INSERT', session, after: row });
   return row;
 }
 
 function action_updateStudent(params) {
-  requireAdmin(params);
+  const session = requireAdmin(params);
   const data = params.data || {};
   requireFields(data, ['Student ID', 'Student Name', 'Course', 'Gmail', 'Mobile Number']);
   if (!isValidEmail(data['Gmail'])) throw new AppError('VALIDATION_ERROR', 'Please enter a valid email address.');
@@ -364,6 +408,7 @@ function action_updateStudent(params) {
   if (!student) throw new AppError('NOT_FOUND', 'Student not found.');
   assertNoDuplicateStudent(data, data['Student ID']);
 
+  const before = JSON.parse(JSON.stringify(student));
   Object.assign(student, {
     'Student Name': String(data['Student Name']).trim(),
     'Enquiry Date': data['Enquiry Date'],
@@ -375,16 +420,19 @@ function action_updateStudent(params) {
     'UpdatedAt': nowIso()
   });
   syncStudentNameEverywhere(data['Student ID'], student['Student Name'], student['Course']);
+  logChange('students', { recordKey: student['Student ID'], studentId: student['Student ID'], action: 'UPDATE', session, before, after: student });
   return student;
 }
 
 function action_deleteStudent(params) {
-  requireAdmin(params);
+  const session = requireAdmin(params);
   const studentId = params.data && params.data['Student ID'];
   if (isBlank(studentId)) throw new AppError('VALIDATION_ERROR', 'Student ID is required.');
   const idx = db.students.findIndex(s => s['Student ID'] === studentId);
   if (idx === -1) throw new AppError('NOT_FOUND', 'Student not found.');
+  const before = db.students[idx];
   db.students.splice(idx, 1);
+  logChange('students', { recordKey: studentId, studentId, action: 'DELETE', session, before });
   return { deleted: true, studentId };
 }
 
@@ -404,7 +452,7 @@ function action_getJobStatus(params) {
 }
 
 function action_saveJobStatus(params) {
-  requireRole(params, CREATOR_ROLES);
+  const session = requireRole(params, CREATOR_ROLES);
   const data = params.data || {};
   requireFields(data, ['Student ID', 'Job Status']);
   validateJobStatusValue(data['Job Status']);
@@ -421,11 +469,12 @@ function action_saveJobStatus(params) {
     'Job Joining Date': data['Job Joining Date'] || '', 'CreatedAt': now, 'UpdatedAt': now
   };
   db.jobs.push(row);
+  logChange('jobs', { recordKey: row._row, studentId: row['Student ID'], action: 'INSERT', session, after: row });
   return row;
 }
 
 function action_updateJobStatus(params) {
-  requireAdmin(params);
+  const session = requireAdmin(params);
   const data = params.data || {};
   requireFields(data, ['_row', 'Job Status']);
   validateJobStatusValue(data['Job Status']);
@@ -433,20 +482,24 @@ function action_updateJobStatus(params) {
   const job = db.jobs.find(j => j._row === Number(data['_row']));
   if (!job) throw new AppError('NOT_FOUND', 'Job status record not found.');
 
+  const before = JSON.parse(JSON.stringify(job));
   Object.assign(job, {
     'Office Joining Date': data['Office Joining Date'] || '', 'Job Status': data['Job Status'],
     'Organization': data['Organization'] || '', 'Job Joining Date': data['Job Joining Date'] || '',
     'UpdatedAt': nowIso()
   });
+  logChange('jobs', { recordKey: job._row, studentId: job['Student ID'], action: 'UPDATE', session, before, after: job });
   return job;
 }
 
 function action_deleteJobStatus(params) {
-  requireAdmin(params);
+  const session = requireAdmin(params);
   const rowIndex = Number(params.data && params.data['_row']);
   const idx = db.jobs.findIndex(j => j._row === rowIndex);
   if (idx === -1) throw new AppError('NOT_FOUND', 'Job status record not found.');
+  const before = db.jobs[idx];
   db.jobs.splice(idx, 1);
+  logChange('jobs', { recordKey: before._row, studentId: before['Student ID'], action: 'DELETE', session, before });
   return { deleted: true };
 }
 
@@ -475,7 +528,7 @@ function action_getPayments(params) {
 }
 
 function action_savePayment(params) {
-  requireAdmin(params);
+  const session = requireAdmin(params);
   const data = params.data || {};
   requireFields(data, ['Student ID', 'Total Course Fee', 'Payment Received', 'Payment Method']);
   validatePaymentMethod(data['Payment Method']);
@@ -503,11 +556,12 @@ function action_savePayment(params) {
     'CreatedAt': nowIso()
   };
   db.payments.push(row);
+  logChange('payments', { recordKey: row['Payment ID'], studentId: row['Student ID'], action: 'INSERT', session, after: row });
   return row;
 }
 
 function action_updatePayment(params) {
-  requireAdmin(params);
+  const session = requireAdmin(params);
   const data = params.data || {};
   requireFields(data, ['_row', 'Total Course Fee', 'Payment Received', 'Payment Method']);
   validatePaymentMethod(data['Payment Method']);
@@ -524,20 +578,24 @@ function action_updatePayment(params) {
   const pending = round2(totalFee - (otherSum + received));
   if (pending < 0) throw new AppError('OVERPAYMENT', `This payment exceeds the pending amount. Maximum allowed right now: ${round2(totalFee - otherSum)}.`);
 
+  const before = JSON.parse(JSON.stringify(payment));
   Object.assign(payment, {
     'Job Offer Date': data['Job Offer Date'] || '', 'Total Course Fee': totalFee,
     'Payment Received': received, 'Payment Method': data['Payment Method'],
     'Pending Amount': pending, 'Payment Date': data['Payment Date'] || todayISO()
   });
+  logChange('payments', { recordKey: payment['Payment ID'], studentId: payment['Student ID'], action: 'UPDATE', session, before, after: payment });
   return payment;
 }
 
 function action_deletePayment(params) {
-  requireAdmin(params);
+  const session = requireAdmin(params);
   const rowIndex = Number(params.data && params.data['_row']);
   const idx = db.payments.findIndex(p => p._row === rowIndex);
   if (idx === -1) throw new AppError('NOT_FOUND', 'Payment record not found.');
+  const before = db.payments[idx];
   db.payments.splice(idx, 1);
+  logChange('payments', { recordKey: before['Payment ID'], studentId: before['Student ID'], action: 'DELETE', session, before });
   return { deleted: true };
 }
 
@@ -714,7 +772,8 @@ const ACTIONS = {
   getJobStatus: action_getJobStatus, saveJobStatus: action_saveJobStatus, updateJobStatus: action_updateJobStatus, deleteJobStatus: action_deleteJobStatus,
   getPayments: action_getPayments, savePayment: action_savePayment, updatePayment: action_updatePayment, deletePayment: action_deletePayment,
   dashboardStats: action_dashboardStats, reports: action_reports,
-  listUsers: action_listUsers, addUser: action_addUser, updateUser: action_updateUser, deleteUser: action_deleteUser
+  listUsers: action_listUsers, addUser: action_addUser, updateUser: action_updateUser, deleteUser: action_deleteUser,
+  getAuditLog: action_getAuditLog
 };
 
 function send(res, status, obj) {

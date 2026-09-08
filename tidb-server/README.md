@@ -13,6 +13,10 @@ via a small Express server instead of Google Sheets.
 - **Concurrency:** SQL transactions + `SELECT ... FOR UPDATE` do the job
   `LockService` does in Apps Script (student-ID/payment-ID sequence
   generation, the overpayment guard).
+- **Audit trail:** every add / edit / delete on students, jobs and payments
+  appends a row to `students_log` / `jobs_log` / `payments_log` — see
+  *Audit / history log* below. (TiDB-specific; the Apps Script backend does
+  not record this.)
 
 ## 1. Get a TiDB database
 
@@ -100,6 +104,40 @@ row directly, or write a tiny one-off script using `logic.js`'s
 `hashPassword(password, salt)` to compute the new hash. A
 `crypto.randomUUID()` makes a fine salt.
 
+### Audit / history log
+
+Three append-only tables record every change to the core data:
+
+| table          | one row per                                   |
+|----------------|-----------------------------------------------|
+| `students_log` | add / edit / delete of a Student Enquiry      |
+| `jobs_log`     | add / edit / delete of a Job Status record    |
+| `payments_log` | add / edit / delete of a Payment              |
+
+Every row carries: `action` (`INSERT` / `UPDATE` / `DELETE`), `actor` (the
+logged-in username who made the change) and `actor_role`, `record_key` (the
+changed row's key) and `student_id` (for per-student lookups), full
+`data_before` / `data_after` JSON snapshots, and `changed_at`. The log write
+runs **in the same transaction** as the change, so there are no silent gaps,
+and the tables are never updated or deleted by the app.
+
+`server.js` runs `schema.sql` on startup (`store.ensureSchema()`), so these
+tables are created automatically on first deploy — no manual migration.
+
+Read them back with the `getAuditLog` action (admin only):
+
+```jsonc
+// POST /exec
+{ "action": "getAuditLog", "token": "…",
+  "entity": "students",        // "students" | "jobs" | "payments"
+  "studentId": "NDR20260007",  // optional filter
+  "recordKey": "PMT000012",    // optional filter (the changed row's own key)
+  "page": 1, "pageSize": 50 }
+```
+
+or query the tables directly, e.g.
+`SELECT * FROM payments_log WHERE student_id = 'NDR20260007' ORDER BY id DESC;`
+
 ## 3. Deploy the API (Render)
 
 A `render.yaml` at the repo root is already set up for this (Render calls
@@ -142,7 +180,9 @@ tidb-server/
 ├── logic.js       # pure business rules (validation, pagination, dashboard
 │                  #  math) — copied close to verbatim from mock-server so
 │                  #  behavior stays identical across all three backends
-├── store.js       # all SQL — students/jobs/payments/counters/users/sessions
+├── store.js       # all SQL — students/jobs/payments/counters/users/
+│                  #  sessions + the students_log/jobs_log/payments_log
+│                  #  audit tables (logChange / loadAuditLog)
 ├── server.js      # Express app: the same action-based /exec endpoint
 ├── setup.js       # one-time: creates tables, seeds the admin (+ optional
 │                  #  employee) login — the TiDB equivalent of apps-script/Setup.gs

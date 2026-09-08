@@ -94,3 +94,67 @@ CREATE TABLE IF NOT EXISTS payments (
   UNIQUE KEY uq_payments_payment_id (payment_id),
   KEY idx_payments_student (student_id)
 );
+
+-- ---------------------------------------------------------------------------
+-- Audit / history log tables. One row is appended for every INSERT, UPDATE
+-- and DELETE on students / jobs / payments, inside the SAME transaction as
+-- the change, so a modification and its log entry commit or roll back
+-- together (store.js: logChange()). All three share one shape:
+--   record_key   the changed row's own key
+--                (students: student_id, jobs: jobs.id, payments: payment_id)
+--   student_id   the related student, for easy per-student history lookups
+--   action       'INSERT' | 'UPDATE' | 'DELETE'
+--   actor        username of the logged-in user who made the change
+--   actor_role   that user's role at the time ('admin' / 'employee' / ...)
+--   data_before  full row snapshot before the change (NULL for INSERT)
+--   data_after   full row snapshot after the change  (NULL for DELETE)
+--   changed_at   ISO timestamp string, same convention as created_at above
+-- These are never edited or deleted by the app; they are an append-only
+-- trail. server.js ensures they exist on startup, so a deploy needs no
+-- manual migration step.
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS students_log (
+  id           BIGINT AUTO_INCREMENT PRIMARY KEY,
+  record_key   VARCHAR(40) NOT NULL,
+  student_id   VARCHAR(20) NOT NULL DEFAULT '',
+  action       VARCHAR(10) NOT NULL,
+  actor        VARCHAR(100) NOT NULL DEFAULT 'unknown',
+  actor_role   VARCHAR(20) NOT NULL DEFAULT '',
+  data_before  JSON NULL,
+  data_after   JSON NULL,
+  changed_at   VARCHAR(40) NOT NULL,
+  KEY idx_students_log_key (record_key),
+  KEY idx_students_log_student (student_id),
+  KEY idx_students_log_time (changed_at)
+);
+
+CREATE TABLE IF NOT EXISTS jobs_log (
+  id           BIGINT AUTO_INCREMENT PRIMARY KEY,
+  record_key   VARCHAR(40) NOT NULL,
+  student_id   VARCHAR(20) NOT NULL DEFAULT '',
+  action       VARCHAR(10) NOT NULL,
+  actor        VARCHAR(100) NOT NULL DEFAULT 'unknown',
+  actor_role   VARCHAR(20) NOT NULL DEFAULT '',
+  data_before  JSON NULL,
+  data_after   JSON NULL,
+  changed_at   VARCHAR(40) NOT NULL,
+  KEY idx_jobs_log_key (record_key),
+  KEY idx_jobs_log_student (student_id),
+  KEY idx_jobs_log_time (changed_at)
+);
+
+CREATE TABLE IF NOT EXISTS payments_log (
+  id           BIGINT AUTO_INCREMENT PRIMARY KEY,
+  record_key   VARCHAR(40) NOT NULL,
+  student_id   VARCHAR(20) NOT NULL DEFAULT '',
+  action       VARCHAR(10) NOT NULL,
+  actor        VARCHAR(100) NOT NULL DEFAULT 'unknown',
+  actor_role   VARCHAR(20) NOT NULL DEFAULT '',
+  data_before  JSON NULL,
+  data_after   JSON NULL,
+  changed_at   VARCHAR(40) NOT NULL,
+  KEY idx_payments_log_key (record_key),
+  KEY idx_payments_log_student (student_id),
+  KEY idx_payments_log_time (changed_at)
+);
