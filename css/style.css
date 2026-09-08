@@ -456,6 +456,10 @@ table.data-table tbody tr.row-pending { opacity: 0.55; }
 .table { color: var(--text); }
 .table > :not(caption) > * > * { border-bottom-color: var(--border); color: var(--text); background: transparent; }
 
+/* Bootstrap's .text-muted hard-codes a near-black colour that vanishes on
+   our dark surfaces — remap it to the themed muted variable. */
+.text-muted { color: var(--text-muted) !important; }
+
 code {
   background: var(--surface-alt);
   color: var(--primary);
