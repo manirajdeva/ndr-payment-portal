@@ -77,6 +77,7 @@ const Settings = (() => {
     document.getElementById('userRole').value = 'employee';
     document.getElementById('userPasswordLabel').innerHTML = 'Password <span class="text-danger">*</span>';
     document.getElementById('userPasswordHint').textContent = 'At least 6 characters.';
+    resetPasswordVisibility();
     new bootstrap.Modal('#userModal').show();
   }
 
@@ -91,6 +92,7 @@ const Settings = (() => {
     document.getElementById('userRole').value = user.role === 'hr' ? 'employee' : user.role;
     document.getElementById('userPasswordLabel').textContent = 'New password';
     document.getElementById('userPasswordHint').textContent = 'Leave blank to keep the current password. At least 6 characters otherwise.';
+    resetPasswordVisibility();
     new bootstrap.Modal('#userModal').show();
   }
 
@@ -145,6 +147,25 @@ const Settings = (() => {
     }
   }
 
+  function wirePasswordToggle() {
+    const btn = document.getElementById('userTogglePassword');
+    const input = document.getElementById('userPassword');
+    if (!btn || !input) return;
+    btn.addEventListener('click', () => {
+      const show = input.type === 'password';
+      input.type = show ? 'text' : 'password';
+      btn.querySelector('i').className = show ? 'fa-solid fa-eye-slash' : 'fa-solid fa-eye';
+    });
+  }
+
+  /** Reset the password field back to hidden whenever the modal is (re)opened. */
+  function resetPasswordVisibility() {
+    const input = document.getElementById('userPassword');
+    const icon = document.querySelector('#userTogglePassword i');
+    if (input) input.type = 'password';
+    if (icon) icon.className = 'fa-solid fa-eye';
+  }
+
   function init() {
     if (wired) return;
     const addBtn = document.getElementById('userAddBtn');
@@ -152,6 +173,7 @@ const Settings = (() => {
     if (!addBtn || !form) return;
     addBtn.addEventListener('click', openAddModal);
     form.addEventListener('submit', handleSubmit);
+    wirePasswordToggle();
     wired = true;
   }
 

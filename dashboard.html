@@ -586,7 +586,10 @@
           </div>
           <div class="mb-1">
             <label class="form-label" id="userPasswordLabel">Password <span class="text-danger">*</span></label>
-            <input type="password" class="form-control" id="userPassword" autocomplete="new-password">
+            <div class="input-group">
+              <input type="password" class="form-control" id="userPassword" autocomplete="new-password">
+              <button type="button" class="input-group-text bg-transparent" id="userTogglePassword" tabindex="-1" title="Show/hide password"><i class="fa-solid fa-eye"></i></button>
+            </div>
             <div class="form-text" id="userPasswordHint">At least 6 characters.</div>
           </div>
         </div>

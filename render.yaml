@@ -4,6 +4,7 @@ services:
     runtime: node
     rootDir: tidb-server
     plan: free
+    autoDeploy: true
     buildCommand: npm install
     startCommand: npm start
     envVars:
