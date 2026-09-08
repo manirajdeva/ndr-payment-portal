@@ -23,9 +23,10 @@ const SESSION_TTL_MS = 4 * 60 * 60 * 1000;
 const ADMIN_USERNAME = 'admin';
 const ADMIN_PASSWORD = 'Admin@123';
 
-// Roles that can add Students / Job Status but never edit/delete them, and
-// have no Payments access. 'hr' is a legacy alias for 'employee'.
-const CREATOR_ROLES = ['employee', 'hr'];
+// Non-admin roles with full add/edit/delete on Students and Job Status, but
+// no Payments access and no user management. 'hr' is a legacy alias for
+// 'employee'.
+const EMPLOYEE_ROLES = ['employee', 'hr'];
 // Roles a user account may be assigned from Settings > User Management.
 const USER_ROLES = ['admin', 'employee'];
 
@@ -369,7 +370,7 @@ function action_searchStudent(params) {
 }
 
 function action_addStudent(params) {
-  const session = requireRole(params, CREATOR_ROLES);
+  const session = requireRole(params, EMPLOYEE_ROLES);
   const data = params.data || {};
   requireFields(data, ['Student Name', 'Course', 'Gmail', 'Mobile Number']);
   if (!isValidEmail(data['Gmail'])) throw new AppError('VALIDATION_ERROR', 'Please enter a valid email address.');
@@ -396,7 +397,7 @@ function action_addStudent(params) {
 }
 
 function action_updateStudent(params) {
-  const session = requireAdmin(params);
+  const session = requireRole(params, EMPLOYEE_ROLES);
   const data = params.data || {};
   requireFields(data, ['Student ID', 'Student Name', 'Course', 'Gmail', 'Mobile Number']);
   if (!isValidEmail(data['Gmail'])) throw new AppError('VALIDATION_ERROR', 'Please enter a valid email address.');
@@ -425,7 +426,7 @@ function action_updateStudent(params) {
 }
 
 function action_deleteStudent(params) {
-  const session = requireAdmin(params);
+  const session = requireRole(params, EMPLOYEE_ROLES);
   const studentId = params.data && params.data['Student ID'];
   if (isBlank(studentId)) throw new AppError('VALIDATION_ERROR', 'Student ID is required.');
   const idx = db.students.findIndex(s => s['Student ID'] === studentId);
@@ -452,7 +453,7 @@ function action_getJobStatus(params) {
 }
 
 function action_saveJobStatus(params) {
-  const session = requireRole(params, CREATOR_ROLES);
+  const session = requireRole(params, EMPLOYEE_ROLES);
   const data = params.data || {};
   requireFields(data, ['Student ID', 'Job Status']);
   validateJobStatusValue(data['Job Status']);
@@ -474,7 +475,7 @@ function action_saveJobStatus(params) {
 }
 
 function action_updateJobStatus(params) {
-  const session = requireAdmin(params);
+  const session = requireRole(params, EMPLOYEE_ROLES);
   const data = params.data || {};
   requireFields(data, ['_row', 'Job Status']);
   validateJobStatusValue(data['Job Status']);
@@ -493,7 +494,7 @@ function action_updateJobStatus(params) {
 }
 
 function action_deleteJobStatus(params) {
-  const session = requireAdmin(params);
+  const session = requireRole(params, EMPLOYEE_ROLES);
   const rowIndex = Number(params.data && params.data['_row']);
   const idx = db.jobs.findIndex(j => j._row === rowIndex);
   if (idx === -1) throw new AppError('NOT_FOUND', 'Job status record not found.');

@@ -69,8 +69,8 @@ async function requireRole(params, allowedRoles) {
   throw new AppError('FORBIDDEN', 'Your account does not have permission to make changes.');
 }
 
-/** Roles that can add Students / Job Status (never edit or delete, and no Payments access). 'hr' is a legacy alias for 'employee'. */
-const CREATOR_ROLES = ['employee', 'hr'];
+/** Non-admin roles with full add/edit/delete on Students and Job Status (but no Payments access and no user management). 'hr' is a legacy alias for 'employee'. */
+const EMPLOYEE_ROLES = ['employee', 'hr'];
 /** Roles a user account may be assigned in the UI. */
 const USER_ROLES = ['admin', 'employee'];
 
@@ -108,7 +108,7 @@ async function action_searchStudent(params) {
 }
 
 async function action_addStudent(params) {
-  const session = await requireRole(params, CREATOR_ROLES);
+  const session = await requireRole(params, EMPLOYEE_ROLES);
   const data = params.data || {};
   requireFields(data, ['Student Name', 'Course', 'Gmail', 'Mobile Number']);
   if (!isValidEmail(data['Gmail'])) throw new AppError('VALIDATION_ERROR', 'Please enter a valid email address.');
@@ -135,7 +135,7 @@ async function action_addStudent(params) {
 }
 
 async function action_updateStudent(params) {
-  const session = await requireAdmin(params);
+  const session = await requireRole(params, EMPLOYEE_ROLES);
   const data = params.data || {};
   requireFields(data, ['Student ID', 'Student Name', 'Course', 'Gmail', 'Mobile Number']);
   if (!isValidEmail(data['Gmail'])) throw new AppError('VALIDATION_ERROR', 'Please enter a valid email address.');
@@ -165,7 +165,7 @@ async function action_updateStudent(params) {
 }
 
 async function action_deleteStudent(params) {
-  const session = await requireAdmin(params);
+  const session = await requireRole(params, EMPLOYEE_ROLES);
   const studentId = params.data && params.data['Student ID'];
   if (isBlank(studentId)) throw new AppError('VALIDATION_ERROR', 'Student ID is required.');
   const affected = await store.deleteStudentRow(studentId, actorOf(session));
@@ -186,7 +186,7 @@ async function action_getJobStatus(params) {
 }
 
 async function action_saveJobStatus(params) {
-  const session = await requireRole(params, CREATOR_ROLES);
+  const session = await requireRole(params, EMPLOYEE_ROLES);
   const data = params.data || {};
   requireFields(data, ['Student ID', 'Job Status']);
   validateJobStatusValue(data['Job Status']);
@@ -207,7 +207,7 @@ async function action_saveJobStatus(params) {
 }
 
 async function action_updateJobStatus(params) {
-  const session = await requireAdmin(params);
+  const session = await requireRole(params, EMPLOYEE_ROLES);
   const data = params.data || {};
   requireFields(data, ['_row', 'Job Status']);
   validateJobStatusValue(data['Job Status']);
@@ -223,7 +223,7 @@ async function action_updateJobStatus(params) {
 }
 
 async function action_deleteJobStatus(params) {
-  const session = await requireAdmin(params);
+  const session = await requireRole(params, EMPLOYEE_ROLES);
   const rowId = Number(params.data && params.data['_row']);
   const affected = await store.deleteJobRow(rowId, actorOf(session));
   if (!affected) throw new AppError('NOT_FOUND', 'Job status record not found.');

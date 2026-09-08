@@ -43,9 +43,10 @@ const Auth = (() => {
   }
 
   /**
-   * True for roles allowed to add records (Students, Job Status, Payments)
-   * but never edit or delete them: 'admin' and 'employee'. 'hr' is accepted
-   * as a legacy alias for 'employee' so older logins keep working.
+   * True for roles allowed to add / edit / delete Student Enquiries and Job
+   * Status: 'admin' and 'employee'. Employees still have no Payments access
+   * and no user management — those stay admin-only (Auth.isAdmin()). 'hr' is
+   * a legacy alias for 'employee' so older logins keep working.
    */
   function canCreate() {
     const role = getRole();
