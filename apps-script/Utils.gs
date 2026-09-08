@@ -16,8 +16,9 @@ var SHEET_NAMES = {
 
 var SESSION_TTL_MS = 4 * 60 * 60 * 1000; // 4 hours
 
-// Roles that can add records (Students, Job Status, Payments) but never
-// edit or delete them. 'hr' is a legacy alias for 'employee'.
+// Roles that can add Students and Job Status entries but never edit or
+// delete them, and have no access to Payments. 'hr' is a legacy alias for
+// 'employee'.
 var CREATOR_ROLES = ['employee', 'hr'];
 // Roles a user account may be assigned from Settings > User Management.
 var USER_ROLES = ['admin', 'employee'];

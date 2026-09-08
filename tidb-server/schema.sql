@@ -17,8 +17,9 @@
 -- Run with: npm run setup  (executes this file, then seeds the admin user)
 
 -- Portal logins. `role` is 'admin' (full access, incl. managing users) or
--- 'employee' (view every section + add records, but never edit/delete).
--- 'hr' may still appear on older rows and behaves exactly like 'employee'.
+-- 'employee' (add Students/Job Status only, no Payments section at all,
+-- never edit/delete). 'hr' may still appear on older rows and behaves
+-- exactly like 'employee'.
 -- Rows are seeded by npm run setup and managed at runtime from the app
 -- (Settings > User Management, admin only).
 CREATE TABLE IF NOT EXISTS users (

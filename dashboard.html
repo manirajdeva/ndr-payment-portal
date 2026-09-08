@@ -28,7 +28,7 @@
       <a class="nav-link active" data-section="dashboard"><i class="fa-solid fa-gauge-high"></i> Dashboard</a>
       <a class="nav-link" data-section="enquiries"><i class="fa-solid fa-user-plus"></i> Student Enquiries</a>
       <a class="nav-link" data-section="jobs"><i class="fa-solid fa-briefcase"></i> Job Status</a>
-      <a class="nav-link" data-section="payments"><i class="fa-solid fa-indian-rupee-sign"></i> Payments</a>
+      <a class="nav-link admin-only" data-section="payments"><i class="fa-solid fa-indian-rupee-sign"></i> Payments</a>
       <a class="nav-link" data-section="reports"><i class="fa-solid fa-chart-column"></i> Reports</a>
       <a class="nav-link" data-section="settings"><i class="fa-solid fa-gear"></i> Settings</a>
     </nav>
@@ -177,8 +177,8 @@
         </div>
       </section>
 
-      <!-- ===================== PAYMENTS ===================== -->
-      <section class="app-section" id="section-payments">
+      <!-- ===================== PAYMENTS (admin only) ===================== -->
+      <section class="app-section admin-only" id="section-payments">
         <div class="card section-card">
           <div class="table-toolbar">
             <div class="d-flex gap-2 flex-wrap">
@@ -195,7 +195,7 @@
               <button class="btn btn-outline-primary btn-sm" id="payExportCsv"><i class="fa-solid fa-file-csv me-1"></i>CSV</button>
               <button class="btn btn-outline-primary btn-sm" id="payExportExcel"><i class="fa-solid fa-file-excel me-1"></i>Excel</button>
               <button class="btn btn-outline-primary btn-sm" id="payExportPdf"><i class="fa-solid fa-file-pdf me-1"></i>PDF</button>
-              <button class="btn btn-primary btn-sm creator-only" id="payAddBtn"><i class="fa-solid fa-plus me-1"></i>Add Payment</button>
+              <button class="btn btn-primary btn-sm admin-only" id="payAddBtn"><i class="fa-solid fa-plus me-1"></i>Add Payment</button>
             </div>
           </div>
           <div class="table-responsive-wrap">
@@ -305,8 +305,9 @@
               </table>
               <div class="alert alert-info small mb-0">
                 <strong>Admins</strong> can add, edit, and delete records and manage user logins.
-                <strong>Employees</strong> can view every section and add new records, but cannot
-                edit or delete anything.
+                <strong>Employees</strong> can view the Dashboard, Enquiries, Job Status and
+                Reports and add new Students and Job Status entries, but have no access to the
+                Payments section and cannot edit or delete anything.
               </div>
             </div>
           </div>
@@ -330,7 +331,7 @@
               <div class="table-toolbar">
                 <div>
                   <div class="section-title mb-0">User Management</div>
-                  <div class="text-muted small">admin = full access &nbsp;·&nbsp; employee = view &amp; add only</div>
+                  <div class="text-muted small">admin = full access &nbsp;·&nbsp; employee = add Students &amp; Jobs only, no Payments, no edit/delete</div>
                 </div>
                 <button class="btn btn-primary btn-sm" id="userAddBtn"><i class="fa-solid fa-user-plus me-1"></i>Add User</button>
               </div>

@@ -19,8 +19,8 @@ const Settings = (() => {
 
   const ACCESS_TEXT = {
     admin: 'Add, edit, delete, manage users',
-    employee: 'View & add only',
-    hr: 'View & add only',
+    employee: 'Add Students & Jobs · no Payments · no edit/delete',
+    hr: 'Add Students & Jobs · no Payments · no edit/delete',
     viewer: 'View only'
   };
 

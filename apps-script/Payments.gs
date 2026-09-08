@@ -10,7 +10,7 @@ var PAYMENT_METHODS = [
 ];
 
 function action_getPayments(params) {
-  requireSession_(params);
+  requireAdmin_(params); // Payments is an admin-only section — employees have no access at all
   var sheet = getSheet_(SHEET_NAMES.PAYMENTS);
   var rows = readAllRows_(sheet);
   if (params.latestOnly) {
@@ -30,7 +30,7 @@ function action_getPayments(params) {
 }
 
 function action_savePayment(params) {
-  requireRole_(params, CREATOR_ROLES);
+  requireAdmin_(params);
   var data = params.data || {};
   requireFields_(data, ['Student ID', 'Total Course Fee', 'Payment Received', 'Payment Method']);
   validatePaymentMethod_(data['Payment Method']);

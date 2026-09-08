@@ -23,8 +23,8 @@ const SESSION_TTL_MS = 4 * 60 * 60 * 1000;
 const ADMIN_USERNAME = 'admin';
 const ADMIN_PASSWORD = 'Admin@123';
 
-// Roles that can add records but never edit/delete them. 'hr' is a legacy
-// alias for 'employee' and behaves identically.
+// Roles that can add Students / Job Status but never edit/delete them, and
+// have no Payments access. 'hr' is a legacy alias for 'employee'.
 const CREATOR_ROLES = ['employee', 'hr'];
 // Roles a user account may be assigned from Settings > User Management.
 const USER_ROLES = ['admin', 'employee'];
@@ -465,7 +465,7 @@ function sumPaymentsForStudent(studentId, excludeRow) {
 }
 
 function action_getPayments(params) {
-  requireSession(params);
+  requireAdmin(params); // Payments is an admin-only section — employees have no access at all
   const rows = params.latestOnly ? Object.values(latestPerStudent(db.payments)) : db.payments;
   return paginateAndSort(rows, {
     search: params.search, searchFields: ['Payment ID', 'Student ID', 'Student Name', 'Payment Method'],
@@ -475,7 +475,7 @@ function action_getPayments(params) {
 }
 
 function action_savePayment(params) {
-  requireRole(params, CREATOR_ROLES);
+  requireAdmin(params);
   const data = params.data || {};
   requireFields(data, ['Student ID', 'Total Course Fee', 'Payment Received', 'Payment Method']);
   validatePaymentMethod(data['Payment Method']);

@@ -69,7 +69,7 @@ async function requireRole(params, allowedRoles) {
   throw new AppError('FORBIDDEN', 'Your account does not have permission to make changes.');
 }
 
-/** Roles that can add records but never edit or delete them. 'hr' is a legacy alias for 'employee'. */
+/** Roles that can add Students / Job Status (never edit or delete, and no Payments access). 'hr' is a legacy alias for 'employee'. */
 const CREATOR_ROLES = ['employee', 'hr'];
 /** Roles a user account may be assigned in the UI. */
 const USER_ROLES = ['admin', 'employee'];
@@ -228,7 +228,7 @@ async function action_deleteJobStatus(params) {
 /* ---------------- Payments (Module 3) ---------------- */
 
 async function action_getPayments(params) {
-  await requireSession(params);
+  await requireAdmin(params); // Payments is an admin-only section — employees have no access at all
   let rows = await store.loadPayments();
   if (params.latestOnly) rows = Object.values(latestPerStudent(rows));
   return paginateAndSort(rows, {
@@ -239,7 +239,7 @@ async function action_getPayments(params) {
 }
 
 async function action_savePayment(params) {
-  await requireRole(params, CREATOR_ROLES);
+  await requireAdmin(params);
   const data = params.data || {};
   requireFields(data, ['Student ID', 'Total Course Fee', 'Payment Received', 'Payment Method']);
   validatePaymentMethod(data['Payment Method']);

@@ -79,9 +79,11 @@ comment — this is remembered on the device until you switch back with
 The `users` table holds every portal login. `role` is one of:
 
 - **admin** — full access, including adding/removing other users
-- **employee** — can view every section and add new records (Students, Job
-  Status, Payments), but can never edit or delete anything, and cannot
-  manage users. (`hr` on older rows is a synonym for `employee`.)
+- **employee** — can view the Dashboard, Enquiries, Job Status and Reports
+  and add new Students and Job Status entries. No access to the Payments
+  section (the API rejects every `*Payment*` action for this role), and
+  can never edit or delete anything or manage users. (`hr` on older rows
+  is a synonym for `employee`.)
 
 `npm run setup` seeds the bootstrap **admin** (and an optional starter
 **employee** if `EMPLOYEE_USERNAME` / `EMPLOYEE_PASSWORD`, or the older
