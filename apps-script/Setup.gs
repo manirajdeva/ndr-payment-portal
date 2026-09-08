@@ -78,12 +78,13 @@ function seedConfig_(spreadsheet) {
  * on every setup() run, so changing the role below and re-running setup()
  * is enough to update an existing account's permissions.
  *
- * Roles: 'admin' (full access, reserved for the primary Config-based
- * admin), 'hr' (can add Students + Job Status, cannot edit/delete
- * anything, no Payments access), 'viewer' (read-only).
+ * Roles: 'admin' (full access, incl. managing users), 'employee' (view
+ * every section + add records, but never edit/delete), 'viewer'
+ * (read-only). 'hr' is a legacy alias for 'employee'. Additional accounts
+ * are normally added from the app itself (Settings > User Management).
  */
 var EXTRA_USERS = [
-  { username: 'hrndr@admin', password: 'CHANGE_ME_ALREADY_SEEDED', role: 'hr' }
+  { username: 'hrndr@admin', password: 'CHANGE_ME_ALREADY_SEEDED', role: 'employee' }
 ];
 
 function seedUsers_(spreadsheet) {

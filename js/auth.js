@@ -42,9 +42,14 @@ const Auth = (() => {
     return getRole() === 'admin';
   }
 
-  /** True for roles allowed to create Students/Job Status entries (admin or hr), but not edit/delete them. */
+  /**
+   * True for roles allowed to add records (Students, Job Status, Payments)
+   * but never edit or delete them: 'admin' and 'employee'. 'hr' is accepted
+   * as a legacy alias for 'employee' so older logins keep working.
+   */
   function canCreate() {
-    return isAdmin() || getRole() === 'hr';
+    const role = getRole();
+    return role === 'admin' || role === 'employee' || role === 'hr';
   }
 
   function clearSession() {

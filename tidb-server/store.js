@@ -207,6 +207,51 @@ async function findUserByUsername(username) {
   return rows[0] || null;
 }
 
+/** Every login, newest first, without the salt/hash columns — for the Settings > User Management table. */
+async function listUsers() {
+  const [rows] = await pool.query('SELECT id, username, role, created_at FROM users ORDER BY id');
+  return rows.map(r => ({ id: r.id, username: r.username, role: r.role, createdAt: r.created_at }));
+}
+
+async function findUserById(id) {
+  const [rows] = await pool.query('SELECT * FROM users WHERE id = ?', [id]);
+  return rows[0] || null;
+}
+
+/** How many admin accounts exist other than `excludeId` — used to refuse removing the last admin. */
+async function countOtherAdmins(excludeId) {
+  const [rows] = await pool.query(
+    'SELECT COUNT(*) AS n FROM users WHERE role = ? AND id <> ?', ['admin', excludeId || 0]
+  );
+  return Number(rows[0].n);
+}
+
+async function insertUser({ username, salt, passwordHash, role, createdAt }) {
+  const [result] = await pool.query(
+    'INSERT INTO users (username, salt, password_hash, role, created_at) VALUES (?, ?, ?, ?, ?)',
+    [username, salt, passwordHash, role, createdAt]
+  );
+  return { id: result.insertId, username, role, createdAt };
+}
+
+/** Updates any of role / salt / password_hash that are present in `fields`. */
+async function updateUserRow(id, fields) {
+  const sets = [];
+  const values = [];
+  if (fields.role !== undefined) { sets.push('role = ?'); values.push(fields.role); }
+  if (fields.salt !== undefined) { sets.push('salt = ?'); values.push(fields.salt); }
+  if (fields.passwordHash !== undefined) { sets.push('password_hash = ?'); values.push(fields.passwordHash); }
+  if (!sets.length) return 0;
+  values.push(id);
+  const [result] = await pool.query(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`, values);
+  return result.affectedRows;
+}
+
+async function deleteUserRow(id) {
+  const [result] = await pool.query('DELETE FROM users WHERE id = ?', [id]);
+  return result.affectedRows;
+}
+
 async function createSession(token, username, role, expiresAt) {
   await pool.query('INSERT INTO sessions (token, username, role, expires_at) VALUES (?, ?, ?, ?)', [token, username, role, expiresAt]);
 }
@@ -226,5 +271,6 @@ module.exports = {
   loadJobs, insertJob, updateJobRow, deleteJobRow,
   loadPayments, insertPayment, updatePaymentRow, deletePaymentRow, sumPaymentsForStudent, getStudentIdForPaymentRow,
   generateStudentId, nextPaymentId,
-  findUserByUsername, createSession, getSession, deleteSession
+  findUserByUsername, listUsers, findUserById, countOtherAdmins, insertUser, updateUserRow, deleteUserRow,
+  createSession, getSession, deleteSession
 };

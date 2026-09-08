@@ -95,8 +95,8 @@ const App = (() => {
     document.getElementById('settingsUsername').textContent = username;
     const role = Auth.getRole();
     document.getElementById('settingsRole').textContent =
-      role === 'admin' ? 'Admin (full access)' :
-      role === 'hr' ? 'HR (can add Students & Job Status; no edit/delete, no Payments)' :
+      role === 'admin' ? 'Admin (full access · manage users)' :
+      (role === 'employee' || role === 'hr') ? 'Employee (view & add only — no edit or delete)' :
       'Viewer (read-only)';
 
     if (!Auth.isAdmin()) {

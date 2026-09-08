@@ -22,9 +22,12 @@ const PORT = 3001;
 const SESSION_TTL_MS = 4 * 60 * 60 * 1000;
 const ADMIN_USERNAME = 'admin';
 const ADMIN_PASSWORD = 'Admin@123';
-const EXTRA_USERS = [
-  { username: 'hrndr@admin', password: 'Hr@2026@', role: 'hr' }
-];
+
+// Roles that can add records but never edit/delete them. 'hr' is a legacy
+// alias for 'employee' and behaves identically.
+const CREATOR_ROLES = ['employee', 'hr'];
+// Roles a user account may be assigned from Settings > User Management.
+const USER_ROLES = ['admin', 'employee'];
 
 const JOB_STATUS_OPTIONS = [
   'Pending', 'Training', 'Interview Scheduled', 'Interview Cleared',
@@ -141,24 +144,27 @@ function latestPerStudent(jobRows) {
 
 /* ---------------- Auth ---------------- */
 
+// In-memory login list. Passwords are plaintext here on purpose — this mock
+// is localhost-only dev scaffolding and never touches a real datastore.
+// Users added via action_addUser live only for the life of this process.
+let nextUserId = 1;
+const users = [
+  { id: nextUserId++, username: ADMIN_USERNAME, password: ADMIN_PASSWORD, role: 'admin', createdAt: nowIso() },
+  { id: nextUserId++, username: 'hrndr@admin', password: 'Hr@2026@', role: 'employee', createdAt: nowIso() }
+];
+
 function action_login(params) {
   requireFields(params, ['username', 'password']);
   const username = String(params.username).trim();
   const password = String(params.password);
 
-  let role = null;
-  if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
-    role = 'admin';
-  } else {
-    const extra = EXTRA_USERS.find(u => u.username === username && u.password === password);
-    if (extra) role = extra.role;
-  }
-  if (!role) throw new AppError('INVALID_CREDENTIALS', 'Invalid username or password.');
+  const user = users.find(u => u.username === username && u.password === password);
+  if (!user) throw new AppError('INVALID_CREDENTIALS', 'Invalid username or password.');
 
   const token = crypto.randomUUID();
   const expiresAt = Date.now() + SESSION_TTL_MS;
-  sessions.set(token, { username, role, expiresAt });
-  return { token, username, role, expiresAt };
+  sessions.set(token, { username, role: user.role, expiresAt });
+  return { token, username, role: user.role, expiresAt };
 }
 
 function action_logout(params) {
@@ -183,11 +189,77 @@ function requireAdmin(params) {
   return session;
 }
 
-/** Like requireAdmin, but also allows the given extra role(s) through (e.g. 'hr' for create-only actions). */
+/** Like requireAdmin, but also allows the given extra role(s) through (e.g. 'employee' for create-only actions). */
 function requireRole(params, allowedRoles) {
   const session = requireSession(params);
   if (session.role === 'admin' || allowedRoles.includes(session.role)) return session;
   throw new AppError('FORBIDDEN', 'Your account does not have permission to make changes.');
+}
+
+/* ---------------- Users (admin only) ---------------- */
+
+function action_listUsers(params) {
+  requireAdmin(params);
+  return { rows: users.map(u => ({ id: u.id, username: u.username, role: u.role, createdAt: u.createdAt })) };
+}
+
+function action_addUser(params) {
+  requireAdmin(params);
+  const data = params.data || {};
+  requireFields(data, ['username', 'password', 'role']);
+  const username = String(data.username).trim();
+  const role = String(data.role).trim();
+  const password = String(data.password);
+  if (username.length < 3) throw new AppError('VALIDATION_ERROR', 'Username must be at least 3 characters.');
+  if (!USER_ROLES.includes(role)) throw new AppError('VALIDATION_ERROR', 'Role must be "admin" or "employee".');
+  if (password.length < 6) throw new AppError('VALIDATION_ERROR', 'Password must be at least 6 characters.');
+  if (users.some(u => u.username.toLowerCase() === username.toLowerCase())) {
+    throw new AppError('DUPLICATE_USER', 'A user with this username already exists.');
+  }
+  const user = { id: nextUserId++, username, password, role, createdAt: nowIso() };
+  users.push(user);
+  return { id: user.id, username: user.username, role: user.role, createdAt: user.createdAt };
+}
+
+function action_updateUser(params) {
+  requireAdmin(params);
+  const data = params.data || {};
+  requireFields(data, ['id']);
+  const user = users.find(u => u.id === Number(data.id));
+  if (!user) throw new AppError('NOT_FOUND', 'User not found.');
+
+  const changes = {};
+  if (!isBlank(data.role)) {
+    const role = String(data.role).trim();
+    if (!USER_ROLES.includes(role)) throw new AppError('VALIDATION_ERROR', 'Role must be "admin" or "employee".');
+    if (user.role === 'admin' && role !== 'admin' && users.filter(u => u.role === 'admin' && u.id !== user.id).length === 0) {
+      throw new AppError('LAST_ADMIN', 'At least one admin account must remain.');
+    }
+    changes.role = role;
+  }
+  if (!isBlank(data.password)) {
+    const password = String(data.password);
+    if (password.length < 6) throw new AppError('VALIDATION_ERROR', 'Password must be at least 6 characters.');
+    changes.password = password;
+  }
+  if (!Object.keys(changes).length) throw new AppError('VALIDATION_ERROR', 'Nothing to update — change the role or set a new password.');
+
+  Object.assign(user, changes);
+  return { id: user.id, username: user.username, role: user.role };
+}
+
+function action_deleteUser(params) {
+  const session = requireAdmin(params);
+  const id = Number(params.data && params.data.id);
+  const idx = users.findIndex(u => u.id === id);
+  if (idx === -1) throw new AppError('NOT_FOUND', 'User not found.');
+  const user = users[idx];
+  if (user.username === session.username) throw new AppError('SELF_DELETE', 'You cannot delete your own account.');
+  if (user.role === 'admin' && users.filter(u => u.role === 'admin' && u.id !== id).length === 0) {
+    throw new AppError('LAST_ADMIN', 'At least one admin account must remain.');
+  }
+  users.splice(idx, 1);
+  return { deleted: true, id };
 }
 
 /* ---------------- Students (Module 1) ---------------- */
@@ -254,7 +326,7 @@ function action_searchStudent(params) {
 }
 
 function action_addStudent(params) {
-  requireRole(params, ['hr']);
+  requireRole(params, CREATOR_ROLES);
   const data = params.data || {};
   requireFields(data, ['Student Name', 'Course', 'Gmail', 'Mobile Number']);
   if (!isValidEmail(data['Gmail'])) throw new AppError('VALIDATION_ERROR', 'Please enter a valid email address.');
@@ -332,7 +404,7 @@ function action_getJobStatus(params) {
 }
 
 function action_saveJobStatus(params) {
-  requireRole(params, ['hr']);
+  requireRole(params, CREATOR_ROLES);
   const data = params.data || {};
   requireFields(data, ['Student ID', 'Job Status']);
   validateJobStatusValue(data['Job Status']);
@@ -403,7 +475,7 @@ function action_getPayments(params) {
 }
 
 function action_savePayment(params) {
-  requireAdmin(params);
+  requireRole(params, CREATOR_ROLES);
   const data = params.data || {};
   requireFields(data, ['Student ID', 'Total Course Fee', 'Payment Received', 'Payment Method']);
   validatePaymentMethod(data['Payment Method']);
@@ -641,7 +713,8 @@ const ACTIONS = {
   deleteStudent: action_deleteStudent, searchStudent: action_searchStudent,
   getJobStatus: action_getJobStatus, saveJobStatus: action_saveJobStatus, updateJobStatus: action_updateJobStatus, deleteJobStatus: action_deleteJobStatus,
   getPayments: action_getPayments, savePayment: action_savePayment, updatePayment: action_updatePayment, deletePayment: action_deletePayment,
-  dashboardStats: action_dashboardStats, reports: action_reports
+  dashboardStats: action_dashboardStats, reports: action_reports,
+  listUsers: action_listUsers, addUser: action_addUser, updateUser: action_updateUser, deleteUser: action_deleteUser
 };
 
 function send(res, status, obj) {

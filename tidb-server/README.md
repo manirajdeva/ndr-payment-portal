@@ -74,13 +74,29 @@ at it for local testing by opening the app with `?api=tidb`, e.g.
 comment — this is remembered on the device until you switch back with
 `?api=mock`).
 
-### Changing the admin password
+### Users and roles
 
-There's no "change password" UI action (same as the Apps Script backend —
-credentials never pass through the frontend). To rotate it, connect to your
-TiDB database with any MySQL client and update the `users` row directly, or
-write a tiny one-off script using `logic.js`'s `hashPassword(password, salt)`
-to compute the new hash. A `crypto.randomUUID()` makes a fine salt.
+The `users` table holds every portal login. `role` is one of:
+
+- **admin** — full access, including adding/removing other users
+- **employee** — can view every section and add new records (Students, Job
+  Status, Payments), but can never edit or delete anything, and cannot
+  manage users. (`hr` on older rows is a synonym for `employee`.)
+
+`npm run setup` seeds the bootstrap **admin** (and an optional starter
+**employee** if `EMPLOYEE_USERNAME` / `EMPLOYEE_PASSWORD`, or the older
+`HR_USERNAME` / `HR_PASSWORD`, are set). After that, add and manage users
+from the app: **Settings → User Management** (admins only), which also
+resets any user's password.
+
+### Changing the bootstrap admin password
+
+The first admin can also be rotated from Settings → User Management like any
+other user. If you'd rather not go through the UI (or you're locked out),
+connect to your TiDB database with any MySQL client and update the `users`
+row directly, or write a tiny one-off script using `logic.js`'s
+`hashPassword(password, salt)` to compute the new hash. A
+`crypto.randomUUID()` makes a fine salt.
 
 ## 3. Deploy the API (Render)
 
@@ -127,7 +143,7 @@ tidb-server/
 ├── store.js       # all SQL — students/jobs/payments/counters/users/sessions
 ├── server.js      # Express app: the same action-based /exec endpoint
 ├── setup.js       # one-time: creates tables, seeds the admin (+ optional
-│                  #  hr) login — the TiDB equivalent of apps-script/Setup.gs
+│                  #  employee) login — the TiDB equivalent of apps-script/Setup.gs
 ├── .env.example   # template — copy to .env, never commit the real one
 └── render.yaml    # at the repo root — Render Blueprint for deploying this
 ```

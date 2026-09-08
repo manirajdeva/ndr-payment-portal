@@ -51,7 +51,15 @@ async function main() {
   const adminUsername = process.env.ADMIN_USERNAME || 'admin';
   const adminPassword = process.env.ADMIN_PASSWORD || 'Admin@123';
   await seedUser(adminUsername, adminPassword, 'admin');
-  await seedUser(process.env.HR_USERNAME, process.env.HR_PASSWORD, 'hr');
+  // Optional starter employee login. EMPLOYEE_* is preferred; HR_* is still
+  // read as a fallback so older .env files keep working (the old 'hr' role
+  // is just an alias for 'employee' now). More users are added from the app
+  // itself: Settings > User Management (admin only).
+  await seedUser(
+    process.env.EMPLOYEE_USERNAME || process.env.HR_USERNAME,
+    process.env.EMPLOYEE_PASSWORD || process.env.HR_PASSWORD,
+    'employee'
+  );
 
   console.log('Setup complete.');
   if (!process.env.ADMIN_PASSWORD) {

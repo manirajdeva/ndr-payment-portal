@@ -75,7 +75,7 @@ function action_searchStudent(params) {
 }
 
 function action_addStudent(params) {
-  requireRole_(params, ['hr']);
+  requireRole_(params, CREATOR_ROLES);
   var data = params.data || {};
   requireFields_(data, ['Student Name', 'Course', 'Gmail', 'Mobile Number']);
 

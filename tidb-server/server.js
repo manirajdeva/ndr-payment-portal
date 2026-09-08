@@ -62,12 +62,17 @@ async function requireAdmin(params) {
   return session;
 }
 
-/** Like requireAdmin, but also allows the given extra role(s) through (e.g. 'hr' for create-only actions). */
+/** Like requireAdmin, but also allows the given extra role(s) through (e.g. 'employee' for create-only actions). */
 async function requireRole(params, allowedRoles) {
   const session = await requireSession(params);
   if (session.role === 'admin' || allowedRoles.includes(session.role)) return session;
   throw new AppError('FORBIDDEN', 'Your account does not have permission to make changes.');
 }
+
+/** Roles that can add records but never edit or delete them. 'hr' is a legacy alias for 'employee'. */
+const CREATOR_ROLES = ['employee', 'hr'];
+/** Roles a user account may be assigned in the UI. */
+const USER_ROLES = ['admin', 'employee'];
 
 /* ---------------- Students (Module 1) ---------------- */
 
@@ -98,7 +103,7 @@ async function action_searchStudent(params) {
 }
 
 async function action_addStudent(params) {
-  await requireRole(params, ['hr']);
+  await requireRole(params, CREATOR_ROLES);
   const data = params.data || {};
   requireFields(data, ['Student Name', 'Course', 'Gmail', 'Mobile Number']);
   if (!isValidEmail(data['Gmail'])) throw new AppError('VALIDATION_ERROR', 'Please enter a valid email address.');
@@ -176,7 +181,7 @@ async function action_getJobStatus(params) {
 }
 
 async function action_saveJobStatus(params) {
-  await requireRole(params, ['hr']);
+  await requireRole(params, CREATOR_ROLES);
   const data = params.data || {};
   requireFields(data, ['Student ID', 'Job Status']);
   validateJobStatusValue(data['Job Status']);
@@ -234,7 +239,7 @@ async function action_getPayments(params) {
 }
 
 async function action_savePayment(params) {
-  await requireAdmin(params);
+  await requireRole(params, CREATOR_ROLES);
   const data = params.data || {};
   requireFields(data, ['Student ID', 'Total Course Fee', 'Payment Received', 'Payment Method']);
   validatePaymentMethod(data['Payment Method']);
@@ -411,6 +416,78 @@ async function action_reports(params) {
   return { rows, total: rows.length };
 }
 
+/* ---------------- Users (admin only) ---------------- */
+
+async function action_listUsers(params) {
+  await requireAdmin(params);
+  return { rows: await store.listUsers() };
+}
+
+async function action_addUser(params) {
+  await requireAdmin(params);
+  const data = params.data || {};
+  requireFields(data, ['username', 'password', 'role']);
+  const username = String(data.username).trim();
+  const role = String(data.role).trim();
+  const password = String(data.password);
+  if (username.length < 3) throw new AppError('VALIDATION_ERROR', 'Username must be at least 3 characters.');
+  if (!USER_ROLES.includes(role)) throw new AppError('VALIDATION_ERROR', 'Role must be "admin" or "employee".');
+  if (password.length < 6) throw new AppError('VALIDATION_ERROR', 'Password must be at least 6 characters.');
+
+  if (await store.findUserByUsername(username)) throw new AppError('DUPLICATE_USER', 'A user with this username already exists.');
+
+  const salt = crypto.randomUUID();
+  const passwordHash = hashPassword(password, salt);
+  try {
+    return await store.insertUser({ username, salt, passwordHash, role, createdAt: nowIso() });
+  } catch (err) {
+    if (err && err.code === 'ER_DUP_ENTRY') throw new AppError('DUPLICATE_USER', 'A user with this username already exists.');
+    throw err;
+  }
+}
+
+async function action_updateUser(params) {
+  await requireAdmin(params);
+  const data = params.data || {};
+  requireFields(data, ['id']);
+  const id = Number(data.id);
+  const user = await store.findUserById(id);
+  if (!user) throw new AppError('NOT_FOUND', 'User not found.');
+
+  const fields = {};
+  if (!isBlank(data.role)) {
+    const role = String(data.role).trim();
+    if (!USER_ROLES.includes(role)) throw new AppError('VALIDATION_ERROR', 'Role must be "admin" or "employee".');
+    if (user.role === 'admin' && role !== 'admin' && (await store.countOtherAdmins(id)) === 0) {
+      throw new AppError('LAST_ADMIN', 'At least one admin account must remain.');
+    }
+    fields.role = role;
+  }
+  if (!isBlank(data.password)) {
+    const password = String(data.password);
+    if (password.length < 6) throw new AppError('VALIDATION_ERROR', 'Password must be at least 6 characters.');
+    fields.salt = crypto.randomUUID();
+    fields.passwordHash = hashPassword(password, fields.salt);
+  }
+  if (!Object.keys(fields).length) throw new AppError('VALIDATION_ERROR', 'Nothing to update — change the role or set a new password.');
+
+  await store.updateUserRow(id, fields);
+  return { id, username: user.username, role: fields.role || user.role };
+}
+
+async function action_deleteUser(params) {
+  const session = await requireAdmin(params);
+  const id = Number(params.data && params.data.id);
+  const user = await store.findUserById(id);
+  if (!user) throw new AppError('NOT_FOUND', 'User not found.');
+  if (user.username === session.username) throw new AppError('SELF_DELETE', 'You cannot delete your own account.');
+  if (user.role === 'admin' && (await store.countOtherAdmins(id)) === 0) {
+    throw new AppError('LAST_ADMIN', 'At least one admin account must remain.');
+  }
+  await store.deleteUserRow(id);
+  return { deleted: true, id };
+}
+
 /** A unique-key violation slipping past the app-level dupe check (a genuine race) surfaces as the same DUPLICATE_MOBILE/DUPLICATE_EMAIL error instead of a raw SQL error. */
 function rethrowDuplicateKey(err) {
   if (err && err.code === 'ER_DUP_ENTRY') {
@@ -429,7 +506,8 @@ const ACTIONS = {
   deleteStudent: action_deleteStudent, searchStudent: action_searchStudent,
   getJobStatus: action_getJobStatus, saveJobStatus: action_saveJobStatus, updateJobStatus: action_updateJobStatus, deleteJobStatus: action_deleteJobStatus,
   getPayments: action_getPayments, savePayment: action_savePayment, updatePayment: action_updatePayment, deletePayment: action_deletePayment,
-  dashboardStats: action_dashboardStats, reports: action_reports
+  dashboardStats: action_dashboardStats, reports: action_reports,
+  listUsers: action_listUsers, addUser: action_addUser, updateUser: action_updateUser, deleteUser: action_deleteUser
 };
 
 const app = express();

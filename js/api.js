@@ -117,7 +117,12 @@ const Api = (() => {
     deletePayment: (row) => call('deletePayment', { data: { _row: row } }),
 
     dashboardStats: () => call('dashboardStats'),
-    reports: (filters) => call('reports', { data: filters })
+    reports: (filters) => call('reports', { data: filters }),
+
+    listUsers: () => call('listUsers'),
+    addUser: (data) => call('addUser', { data }),
+    updateUser: (data) => call('updateUser', { data }),
+    deleteUser: (id) => call('deleteUser', { data: { id } })
   };
 })();
 

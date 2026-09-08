@@ -24,7 +24,11 @@ var ACTIONS = {
   updatePayment: action_updatePayment,
   deletePayment: action_deletePayment,
   dashboardStats: action_dashboardStats,
-  reports: action_reports
+  reports: action_reports,
+  listUsers: action_listUsers,
+  addUser: action_addUser,
+  updateUser: action_updateUser,
+  deleteUser: action_deleteUser
 };
 
 function doPost(e) {
