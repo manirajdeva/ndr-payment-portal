@@ -460,6 +460,59 @@ table.data-table tbody tr.row-pending { opacity: 0.55; }
    our dark surfaces — remap it to the themed muted variable. */
 .text-muted { color: var(--text-muted) !important; }
 
+/* Same problem, same cause: these Bootstrap rules resolve to --bs-secondary-color
+   (rgba(33,37,41,.75)) or --bs-secondary-bg (#e9ecef). Bootstrap only swaps those
+   for a [data-bs-theme="dark"] root, which this app never sets — it themes itself
+   through [data-theme] and the variables at the top of this file — so they stay on
+   their light-mode values and turn invisible on our dark surfaces. Point them at
+   our own variables instead, which is correct in both themes. */
+
+/* Help text under a field ("Set automatically to today’s date...") was
+   near-black on a dark card. */
+.form-text { color: var(--text-muted); }
+
+/* Placeholders ("Search by name, ID or mobile...") were barely legible. */
+.form-control::placeholder,
+.form-select::placeholder { color: var(--text-muted); opacity: 1; }
+
+/* A disabled/readonly field got a light-grey Bootstrap background while keeping
+   our light text colour — white on near-white. Affects the auto-filled fields:
+   Processed Date, an inherited Payment Type, and the read-only student/course
+   boxes. */
+.form-control:disabled,
+.form-select:disabled,
+.form-control[readonly] {
+  background: var(--surface-alt);
+  color: var(--text-muted);
+  opacity: 1;
+}
+
+/* The password eye toggle: .input-group-text hard-codes --bs-body-color. */
+.input-group-text { background: var(--surface-alt); color: var(--text); border-color: var(--border); }
+
+/* Native dropdown options follow the OS, not the select, in some browsers. */
+.form-select option { background: var(--surface); color: var(--text); }
+
+/* Unchecked boxes (Form 16, PF, "Latest payment per student") painted pure white.
+   :checked keeps Bootstrap’s blue fill — it outranks this on specificity. */
+.form-check-input { background-color: var(--surface-alt); border-color: var(--text-muted); }
+
+/* Cancel buttons: #6c757d on a dark modal is too dim to read comfortably. */
+.btn-outline-secondary { --bs-btn-color: var(--text-muted); --bs-btn-border-color: var(--border); }
+
+/* The select chevron and the date field’s calendar icon are dark-stroked images,
+   invisible against a dark input, so they need a per-theme swap. */
+[data-theme="dark"] .form-select {
+  --bs-form-select-bg-img: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%2394a1c7' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e");
+}
+[data-theme="dark"] .form-control::-webkit-calendar-picker-indicator { filter: invert(1) brightness(1.6); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .form-select {
+    --bs-form-select-bg-img: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%2394a1c7' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e");
+  }
+  :root:not([data-theme="light"]) .form-control::-webkit-calendar-picker-indicator { filter: invert(1) brightness(1.6); }
+}
+
 code {
   background: var(--surface-alt);
   color: var(--primary);
