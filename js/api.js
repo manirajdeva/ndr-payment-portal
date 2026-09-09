@@ -111,6 +111,11 @@ const Api = (() => {
     updateJobStatus: (data) => call('updateJobStatus', { data }),
     deleteJobStatus: (row) => call('deleteJobStatus', { data: { _row: row } }),
 
+    getDocuments: (opts) => call('getDocuments', opts),
+    saveDocument: (data) => call('saveDocument', { data }),
+    updateDocument: (data) => call('updateDocument', { data }),
+    deleteDocument: (row) => call('deleteDocument', { data: { _row: row } }),
+
     getPayments: (opts) => call('getPayments', opts),
     savePayment: (data) => call('savePayment', { data }),
     updatePayment: (data) => call('updatePayment', { data }),

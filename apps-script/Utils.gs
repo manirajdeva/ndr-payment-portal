@@ -11,7 +11,8 @@ var SHEET_NAMES = {
   USERS: 'Users',
   ENQUIRIES: 'Student Enquiries',
   JOBS: 'Job Status',
-  PAYMENTS: 'Student Payments'
+  PAYMENTS: 'Student Payments',
+  DOCUMENTS: 'Documents'
 };
 
 var SESSION_TTL_MS = 4 * 60 * 60 * 1000; // 4 hours

@@ -13,7 +13,7 @@
 const fs = require('fs');
 const path = require('path');
 const { pool, withTransaction } = require('./db');
-const { round2, nowIso } = require('./logic');
+const { round2, nowIso, isBlank } = require('./logic');
 
 const STUDENT_COLS = {
   'Student ID': 'student_id', 'Student Name': 'student_name', 'Enquiry Date': 'enquiry_date',
@@ -25,10 +25,18 @@ const JOB_COLS = {
   'Job Status': 'job_status', 'Course': 'course', 'Organization': 'organization',
   'Job Joining Date': 'job_joining_date', 'CreatedAt': 'created_at', 'UpdatedAt': 'updated_at'
 };
+const DOCUMENT_COLS = {
+  'Student ID': 'student_id', 'Student Name': 'student_name', 'Organization Name': 'org_name',
+  'No of Years': 'no_of_years', 'Employee Role': 'emp_role', 'Doc Start Date': 'doc_start_date',
+  'Doc End Date': 'doc_end_date', 'Form 16': 'form_16', 'PF': 'pf',
+  'Processed Date': 'processed_date', 'Given By': 'given_by',
+  'CreatedAt': 'created_at', 'UpdatedAt': 'updated_at'
+};
 const PAYMENT_COLS = {
   'Payment ID': 'payment_id', 'Student ID': 'student_id', 'Student Name': 'student_name', 'Course': 'course',
   'Installment No': 'installment_no', 'Job Offer Date': 'job_offer_date', 'Total Course Fee': 'total_course_fee',
-  'Payment Received': 'payment_received', 'Payment Method': 'payment_method', 'Pending Amount': 'pending_amount',
+  'Payment Received': 'payment_received', 'Payment Method': 'payment_method', 'Payment Type': 'payment_type',
+  'Pending Amount': 'pending_amount',
   'Payment Date': 'payment_date', 'CreatedAt': 'created_at'
 };
 
@@ -50,10 +58,11 @@ function insertStatement(table, colMap, row, extra = {}) {
 
 // entity -> log table. The value is a fixed literal, never request input,
 // so interpolating it into the INSERT below is safe.
-const LOG_TABLE = { students: 'students_log', jobs: 'jobs_log', payments: 'payments_log' };
+const LOG_TABLE = { students: 'students_log', jobs: 'jobs_log', payments: 'payments_log', documents: 'documents_log' };
 
 /**
- * Appends one audit row for a change to students / jobs / payments. MUST be
+ * Appends one audit row for a change to students / jobs / payments /
+ * documents. MUST be
  * called on the same `conn` (transaction) as the change itself, so the two
  * commit or roll back together — an audit trail with silent gaps is worse
  * than none. `actor` is { username, role } from the caller's session.
@@ -100,14 +109,42 @@ async function loadAuditLog(entity, { studentId, recordKey } = {}) {
 }
 
 /**
+ * Columns added to an existing table after its first deploy. CREATE TABLE
+ * IF NOT EXISTS leaves an already-created table untouched, so each of these
+ * needs an ALTER — applied only when the column is genuinely missing, which
+ * keeps this safe to run on every startup.
+ *
+ * The table/column names are fixed literals, never request input, so
+ * interpolating them into the ALTER below is safe.
+ */
+const ADDED_COLUMNS = [
+  { table: 'payments', column: 'payment_type', definition: "VARCHAR(50) NOT NULL DEFAULT '' AFTER payment_method" }
+];
+
+async function applyColumnMigrations() {
+  for (const { table, column, definition } of ADDED_COLUMNS) {
+    const [rows] = await pool.query(
+      `SELECT column_name FROM information_schema.columns
+        WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?`,
+      [table, column]
+    );
+    if (rows.length) continue;
+    await pool.query(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+    console.log(`Migration: added ${table}.${column}`);
+  }
+}
+
+/**
  * Runs schema.sql (every statement is CREATE TABLE IF NOT EXISTS, so this
- * is idempotent). Called once on server startup so a fresh deploy — new
- * audit-log tables included — needs no manual migration step.
+ * is idempotent), then adds any column introduced after a table was first
+ * created. Called once on server startup so a deploy — new audit-log tables
+ * and new columns included — needs no manual migration step.
  */
 async function ensureSchema() {
   const sql = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
   const statements = sql.split(/;\s*(?:\r?\n|$)/).map(s => s.trim()).filter(Boolean);
   for (const statement of statements) await pool.query(statement);
+  await applyColumnMigrations();
 }
 
 /* ---------------- Students ---------------- */
@@ -176,10 +213,11 @@ async function deleteStudentRow(studentId, actor) {
   });
 }
 
-/** Keeps Student Name/Course consistent in Job Status + Payments if edited later (mirrors apps-script). */
+/** Keeps Student Name/Course consistent in Job Status + Payments + Documents if edited later (mirrors apps-script). */
 async function syncStudentNameEverywhere(conn, studentId, name, course) {
   await conn.query('UPDATE jobs SET student_name = ? WHERE student_id = ?', [name, studentId]);
   await conn.query('UPDATE payments SET student_name = ? WHERE student_id = ?', [name, studentId]);
+  await conn.query('UPDATE documents SET student_name = ? WHERE student_id = ?', [name, studentId]);
   if (course) {
     await conn.query('UPDATE jobs SET course = ? WHERE student_id = ?', [course, studentId]);
     await conn.query('UPDATE payments SET course = ? WHERE student_id = ?', [course, studentId]);
@@ -235,6 +273,84 @@ async function deleteJobRow(rowId, actor) {
   });
 }
 
+/* ---------------- Documents ---------------- */
+
+/**
+ * form_16 / pf are stored as TINYINT(1) and no_of_years as DECIMAL, both of
+ * which mysql2 hands back as 0/1 and as a string. Normalising them here
+ * keeps the row shape the frontend receives identical to mock-server's
+ * (real booleans, a real number), so js/documents.js needs no per-backend
+ * special-casing.
+ */
+function documentToDisplay(dbRow) {
+  const row = toDisplay(dbRow, DOCUMENT_COLS, true);
+  row['Form 16'] = !!dbRow.form_16;
+  row['PF'] = !!dbRow.pf;
+  row['No of Years'] = Number(dbRow.no_of_years) || 0;
+  return row;
+}
+
+/** The values actually written to SQL — booleans back to 1/0 for TINYINT(1). */
+function documentToDb(row) {
+  return Object.assign({}, row, {
+    'Form 16': row['Form 16'] ? 1 : 0,
+    'PF': row['PF'] ? 1 : 0
+  });
+}
+
+async function loadDocuments() {
+  const [rows] = await pool.query('SELECT * FROM documents');
+  return rows.map(documentToDisplay);
+}
+
+async function insertDocument(conn, row, actor) {
+  const { sql, values } = insertStatement('documents', DOCUMENT_COLS, documentToDb(row));
+  const [result] = await conn.query(sql, values);
+  const saved = { ...row, _row: result.insertId };
+  await logChange(conn, 'documents', {
+    recordKey: result.insertId, studentId: row['Student ID'], action: 'INSERT', actor, after: saved
+  });
+  return saved;
+}
+
+async function updateDocumentRow(conn, rowId, update, actor) {
+  const [beforeRows] = await conn.query('SELECT * FROM documents WHERE id = ? FOR UPDATE', [rowId]);
+  const before = beforeRows.length ? documentToDisplay(beforeRows[0]) : null;
+
+  // 'Processed Date' is deliberately not updatable — it records when the
+  // documents were first processed (see schema.sql).
+  const fields = [
+    'Organization Name', 'No of Years', 'Employee Role', 'Doc Start Date',
+    'Doc End Date', 'Form 16', 'PF', 'Given By', 'UpdatedAt'
+  ];
+  const dbUpdate = documentToDb(update);
+  const sets = fields.filter(k => k in update);
+  const sql = `UPDATE documents SET ${sets.map(k => `${DOCUMENT_COLS[k]} = ?`).join(', ')} WHERE id = ?`;
+  const values = sets.map(k => dbUpdate[k]).concat([rowId]);
+  const [result] = await conn.query(sql, values);
+  if (result.affectedRows && before) {
+    await logChange(conn, 'documents', {
+      recordKey: rowId, studentId: before['Student ID'], action: 'UPDATE', actor,
+      before, after: Object.assign({}, before, update)
+    });
+  }
+  return result.affectedRows;
+}
+
+async function deleteDocumentRow(rowId, actor) {
+  return withTransaction(async conn => {
+    const [rows] = await conn.query('SELECT * FROM documents WHERE id = ? FOR UPDATE', [rowId]);
+    const before = rows.length ? documentToDisplay(rows[0]) : null;
+    const [result] = await conn.query('DELETE FROM documents WHERE id = ?', [rowId]);
+    if (result.affectedRows) {
+      await logChange(conn, 'documents', {
+        recordKey: rowId, studentId: before ? before['Student ID'] : '', action: 'DELETE', actor, before
+      });
+    }
+    return result.affectedRows;
+  });
+}
+
 /* ---------------- Payments ---------------- */
 
 async function loadPayments() {
@@ -256,7 +372,7 @@ async function updatePaymentRow(conn, rowId, update, actor) {
   const [beforeRows] = await conn.query('SELECT * FROM payments WHERE id = ? FOR UPDATE', [rowId]);
   const before = beforeRows.length ? toDisplay(beforeRows[0], PAYMENT_COLS, true) : null;
 
-  const fields = ['Job Offer Date', 'Total Course Fee', 'Payment Received', 'Payment Method', 'Pending Amount', 'Payment Date'];
+  const fields = ['Job Offer Date', 'Total Course Fee', 'Payment Received', 'Payment Method', 'Payment Type', 'Pending Amount', 'Payment Date'];
   const sets = fields.filter(k => k in update);
   const sql = `UPDATE payments SET ${sets.map(k => `${PAYMENT_COLS[k]} = ?`).join(', ')} WHERE id = ?`;
   const values = sets.map(k => update[k]).concat([rowId]);
@@ -285,15 +401,41 @@ async function deletePaymentRow(rowId, actor) {
   });
 }
 
-/** Locks every payment row for the student (SELECT ... FOR UPDATE) so a concurrent insert can't race past the overpayment check — the SQL equivalent of apps-script's LockService. Caller must be inside a transaction. Returns both the paid-so-far sum (excluding excludeRowId, for edits) and the total row count (for the next installment number). */
+/**
+ * Locks every payment row for the student (SELECT ... FOR UPDATE) so a
+ * concurrent insert can't race past the overpayment check — the SQL
+ * equivalent of apps-script's LockService. Caller must be inside a
+ * transaction. Returns:
+ *   sum            paid so far, excluding excludeRowId (for edits)
+ *   count          total rows, for the next installment number
+ *   firstRowId     the student's first installment — the one whose Payment
+ *                  Type governs all the others
+ *   inheritedType  that governing Payment Type: the earliest installment's,
+ *                  skipping rows saved before the field existed (blank ones)
+ */
 async function sumPaymentsForStudent(conn, studentId, excludeRowId) {
   const [rows] = await conn.query(
-    'SELECT id, payment_received FROM payments WHERE student_id = ? FOR UPDATE', [studentId]
+    'SELECT id, payment_received, payment_type, installment_no FROM payments WHERE student_id = ? FOR UPDATE', [studentId]
   );
   const sum = rows
     .filter(r => r.id !== excludeRowId)
     .reduce((acc, r) => acc + (Number(r.payment_received) || 0), 0);
-  return { sum: round2(sum), count: rows.length };
+
+  const inOrder = rows.slice().sort((a, b) =>
+    (Number(a.installment_no) || 0) - (Number(b.installment_no) || 0) || a.id - b.id);
+  const governing = inOrder.find(r => !isBlank(r.payment_type));
+
+  return {
+    sum: round2(sum),
+    count: rows.length,
+    firstRowId: inOrder.length ? inOrder[0].id : null,
+    inheritedType: governing ? governing.payment_type : ''
+  };
+}
+
+/** Applies one Payment Type to every payment a student has, so later installments never drift from the first one. Caller must be inside a transaction. */
+async function syncPaymentTypeForStudent(conn, studentId, paymentType) {
+  await conn.query('UPDATE payments SET payment_type = ? WHERE student_id = ?', [paymentType, studentId]);
 }
 
 async function getStudentIdForPaymentRow(conn, rowId) {
@@ -397,7 +539,8 @@ module.exports = {
   withTransaction, ensureSchema, logChange, loadAuditLog,
   loadStudents, findStudentById, assertNoDuplicateStudent, insertStudent, updateStudentRow, deleteStudentRow, syncStudentNameEverywhere,
   loadJobs, insertJob, updateJobRow, deleteJobRow,
-  loadPayments, insertPayment, updatePaymentRow, deletePaymentRow, sumPaymentsForStudent, getStudentIdForPaymentRow,
+  loadDocuments, insertDocument, updateDocumentRow, deleteDocumentRow,
+  loadPayments, insertPayment, updatePaymentRow, deletePaymentRow, sumPaymentsForStudent, syncPaymentTypeForStudent, getStudentIdForPaymentRow,
   generateStudentId, nextPaymentId,
   findUserByUsername, listUsers, findUserById, countOtherAdmins, insertUser, updateUserRow, deleteUserRow,
   createSession, getSession, deleteSession

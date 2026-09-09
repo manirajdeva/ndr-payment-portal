@@ -28,6 +28,7 @@
       <a class="nav-link active" data-section="dashboard"><i class="fa-solid fa-gauge-high"></i> Dashboard</a>
       <a class="nav-link" data-section="enquiries"><i class="fa-solid fa-user-plus"></i> Student Enquiries</a>
       <a class="nav-link" data-section="jobs"><i class="fa-solid fa-briefcase"></i> Job Status</a>
+      <a class="nav-link" data-section="documents"><i class="fa-solid fa-file-lines"></i> Documents</a>
       <a class="nav-link admin-only" data-section="payments"><i class="fa-solid fa-indian-rupee-sign"></i> Payments</a>
       <a class="nav-link" data-section="reports"><i class="fa-solid fa-chart-column"></i> Reports</a>
       <a class="nav-link" data-section="settings"><i class="fa-solid fa-gear"></i> Settings</a>
@@ -177,6 +178,47 @@
         </div>
       </section>
 
+      <!-- ===================== DOCUMENTS ===================== -->
+      <section class="app-section" id="section-documents">
+        <div class="card section-card">
+          <div class="table-toolbar">
+            <div class="d-flex gap-2 flex-wrap">
+              <input type="text" class="form-control" id="docSearch" placeholder="Search by student, organization, role or given by..." style="min-width:260px;">
+              <input type="date" class="form-control" id="docDateFrom" title="Processed date from" style="max-width:150px;">
+              <input type="date" class="form-control" id="docDateTo" title="Processed date to" style="max-width:150px;">
+            </div>
+            <div class="d-flex gap-2 flex-wrap">
+              <button class="btn btn-outline-primary btn-sm" id="docExportCsv"><i class="fa-solid fa-file-csv me-1"></i>CSV</button>
+              <button class="btn btn-outline-primary btn-sm" id="docExportExcel"><i class="fa-solid fa-file-excel me-1"></i>Excel</button>
+              <button class="btn btn-outline-primary btn-sm" id="docExportPdf"><i class="fa-solid fa-file-pdf me-1"></i>PDF</button>
+              <button class="btn btn-primary btn-sm creator-only" id="docAddBtn"><i class="fa-solid fa-plus me-1"></i>Add Document</button>
+            </div>
+          </div>
+          <div class="table-responsive-wrap">
+            <table class="data-table" id="docTable">
+              <thead>
+                <tr>
+                  <th data-sort="Student ID">Student ID</th>
+                  <th data-sort="Student Name">Name</th>
+                  <th data-sort="Organization Name">Organization</th>
+                  <th data-sort="No of Years">Years</th>
+                  <th data-sort="Employee Role">Role</th>
+                  <th data-sort="Doc Start Date">Doc Start</th>
+                  <th data-sort="Doc End Date">Doc End</th>
+                  <th>Form 16</th>
+                  <th>PF</th>
+                  <th data-sort="Processed Date">Processed</th>
+                  <th data-sort="Given By">Given By</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="docTableBody"></tbody>
+            </table>
+          </div>
+          <div class="pagination-bar" id="docPagination"></div>
+        </div>
+      </section>
+
       <!-- ===================== PAYMENTS (admin only) ===================== -->
       <section class="app-section admin-only" id="section-payments">
         <div class="card section-card">
@@ -211,6 +253,7 @@
                   <th data-sort="Payment Received">Received</th>
                   <th data-sort="Pending Amount">Pending</th>
                   <th>Method</th>
+                  <th data-sort="Payment Type">Type</th>
                   <th data-sort="Payment Date">Date</th>
                   <th>Actions</th>
                 </tr>
@@ -475,6 +518,76 @@
   </div>
 </div>
 
+<div class="modal fade" id="docModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="docModalTitle">Add Document</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form id="docForm">
+        <div class="modal-body">
+          <input type="hidden" id="docRowHidden">
+          <div class="row g-3">
+            <div class="col-md-6 position-relative">
+              <label class="form-label">Student ID <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" id="docStudentSearch" placeholder="Search by name, ID or mobile..." autocomplete="off">
+              <div class="list-group position-absolute w-100" id="docStudentResults" style="z-index:1060; max-height:220px; overflow-y:auto;"></div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Student Name</label>
+              <input type="text" class="form-control" id="docStudentName" readonly>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Organization Name <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" id="docOrgName" required>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">No of Years</label>
+              <input type="number" class="form-control" id="docNoOfYears" min="0" max="60" step="0.5" placeholder="e.g. 2.5">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Employee Role</label>
+              <input type="text" class="form-control" id="docEmpRole" placeholder="e.g. Software Engineer">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Given By</label>
+              <input type="text" class="form-control" id="docGivenBy" placeholder="Who handed over the documents">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Doc Start Date</label>
+              <input type="date" class="form-control" id="docStartDate">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Doc End Date</label>
+              <input type="date" class="form-control" id="docEndDate">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Processed Date</label>
+              <input type="date" class="form-control" id="docProcessedDate" readonly disabled>
+              <div class="form-text">Set automatically to today's date when the record is saved.</div>
+            </div>
+            <div class="col-md-6 d-flex align-items-center gap-4 pt-md-4">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="docForm16">
+                <label class="form-check-label" for="docForm16">Form 16</label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="docPf">
+                <label class="form-check-label" for="docPf">PF</label>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="docSaveBtn">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
 <div class="modal fade" id="payModal" tabindex="-1">
   <div class="modal-dialog modal-lg modal-dialog-centered">
     <div class="modal-content">
@@ -516,6 +629,11 @@
               <select class="form-select" id="payMethod" required></select>
             </div>
             <div class="col-md-6">
+              <label class="form-label">Payment Type <span class="text-danger">*</span></label>
+              <select class="form-select" id="payType" required></select>
+              <div class="form-text d-none" id="payTypeHint"></div>
+            </div>
+            <div class="col-md-6">
               <label class="form-label">Payment Date</label>
               <input type="date" class="form-control" id="payDate">
             </div>
@@ -553,6 +671,7 @@
                 <th>Received</th>
                 <th>Pending</th>
                 <th>Method</th>
+                <th>Type</th>
                 <th>Date</th>
               </tr>
             </thead>
@@ -616,6 +735,7 @@
 <script src="js/dashboard.js"></script>
 <script src="js/enquiries.js"></script>
 <script src="js/jobs.js"></script>
+<script src="js/documents.js"></script>
 <script src="js/payments.js"></script>
 <script src="js/reports.js"></script>
 <script src="js/settings.js"></script>

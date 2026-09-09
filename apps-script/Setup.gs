@@ -24,8 +24,13 @@ function setup() {
   ]);
   ensureSheet_(spreadsheet, SHEET_NAMES.PAYMENTS, [
     'Payment ID', 'Student ID', 'Student Name', 'Course', 'Installment No', 'Job Offer Date',
-    'Total Course Fee', 'Payment Received', 'Payment Method',
+    'Total Course Fee', 'Payment Received', 'Payment Method', 'Payment Type',
     'Pending Amount', 'Payment Date', 'CreatedAt'
+  ]);
+  ensureSheet_(spreadsheet, SHEET_NAMES.DOCUMENTS, [
+    'Student ID', 'Student Name', 'Organization Name', 'No of Years', 'Employee Role',
+    'Doc Start Date', 'Doc End Date', 'Form 16', 'PF', 'Processed Date', 'Given By',
+    'CreatedAt', 'UpdatedAt'
   ]);
   ensureSheet_(spreadsheet, SHEET_NAMES.USERS, ['Username', 'Salt', 'PasswordHash', 'Role', 'CreatedAt']);
 

@@ -88,6 +88,7 @@ CREATE TABLE IF NOT EXISTS payments (
   total_course_fee   DECIMAL(12,2) NOT NULL,
   payment_received   DECIMAL(12,2) NOT NULL,
   payment_method     VARCHAR(50) NOT NULL,
+  payment_type       VARCHAR(50) NOT NULL DEFAULT '',
   pending_amount     DECIMAL(12,2) NOT NULL,
   payment_date       VARCHAR(20) NOT NULL,
   created_at         VARCHAR(40) NOT NULL,
@@ -95,13 +96,40 @@ CREATE TABLE IF NOT EXISTS payments (
   KEY idx_payments_student (student_id)
 );
 
+-- Module 4 — Documents. Employment/experience documents collected from a
+-- student, linked to Student Enquiries by student_id (same ID as every
+-- other table). form_16 / pf are TINYINT(1) booleans; store.js maps them
+-- back to real true/false so the frontend contract stays JSON-boolean.
+-- processed_date is stamped with the server's current date when the record
+-- is created and is not changed by later edits — it records when the
+-- documents were processed, not when the row was last touched (updated_at
+-- already covers that).
+CREATE TABLE IF NOT EXISTS documents (
+  id              BIGINT AUTO_INCREMENT PRIMARY KEY,
+  student_id      VARCHAR(20) NOT NULL,
+  student_name    VARCHAR(150) NOT NULL,
+  org_name        VARCHAR(150) NOT NULL DEFAULT '',
+  no_of_years     DECIMAL(5,1) NOT NULL DEFAULT 0,
+  emp_role        VARCHAR(150) NOT NULL DEFAULT '',
+  doc_start_date  VARCHAR(20) NOT NULL DEFAULT '',
+  doc_end_date    VARCHAR(20) NOT NULL DEFAULT '',
+  form_16         TINYINT(1) NOT NULL DEFAULT 0,
+  pf              TINYINT(1) NOT NULL DEFAULT 0,
+  processed_date  VARCHAR(20) NOT NULL DEFAULT '',
+  given_by        VARCHAR(150) NOT NULL DEFAULT '',
+  created_at      VARCHAR(40) NOT NULL,
+  updated_at      VARCHAR(40) NOT NULL,
+  KEY idx_documents_student (student_id)
+);
+
 -- ---------------------------------------------------------------------------
 -- Audit / history log tables. One row is appended for every INSERT, UPDATE
--- and DELETE on students / jobs / payments, inside the SAME transaction as
--- the change, so a modification and its log entry commit or roll back
--- together (store.js: logChange()). All three share one shape:
+-- and DELETE on students / jobs / payments / documents, inside the SAME
+-- transaction as the change, so a modification and its log entry commit or roll back
+-- together (store.js: logChange()). All four share one shape:
 --   record_key   the changed row's own key
---                (students: student_id, jobs: jobs.id, payments: payment_id)
+--                (students: student_id, jobs: jobs.id, payments: payment_id,
+--                 documents: documents.id)
 --   student_id   the related student, for easy per-student history lookups
 --   action       'INSERT' | 'UPDATE' | 'DELETE'
 --   actor        username of the logged-in user who made the change
@@ -157,4 +185,19 @@ CREATE TABLE IF NOT EXISTS payments_log (
   KEY idx_payments_log_key (record_key),
   KEY idx_payments_log_student (student_id),
   KEY idx_payments_log_time (changed_at)
+);
+
+CREATE TABLE IF NOT EXISTS documents_log (
+  id           BIGINT AUTO_INCREMENT PRIMARY KEY,
+  record_key   VARCHAR(40) NOT NULL,
+  student_id   VARCHAR(20) NOT NULL DEFAULT '',
+  action       VARCHAR(10) NOT NULL,
+  actor        VARCHAR(100) NOT NULL DEFAULT 'unknown',
+  actor_role   VARCHAR(20) NOT NULL DEFAULT '',
+  data_before  JSON NULL,
+  data_after   JSON NULL,
+  changed_at   VARCHAR(40) NOT NULL,
+  KEY idx_documents_log_key (record_key),
+  KEY idx_documents_log_student (student_id),
+  KEY idx_documents_log_time (changed_at)
 );

@@ -207,7 +207,7 @@ function assertNoDuplicateStudent_(rows, data, excludeStudentId) {
 
 /** Keeps Student Name/Course consistent in Job Status + Payments if edited later. */
 function syncStudentNameEverywhere_(studentId, name, course) {
-  [SHEET_NAMES.JOBS, SHEET_NAMES.PAYMENTS].forEach(function (sheetName) {
+  [SHEET_NAMES.JOBS, SHEET_NAMES.PAYMENTS, SHEET_NAMES.DOCUMENTS].forEach(function (sheetName) {
     var sheet = getSheet_(sheetName);
     var lastRow = sheet.getLastRow();
     if (lastRow < 2) return;

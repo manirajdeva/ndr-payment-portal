@@ -11,6 +11,7 @@ const App = (() => {
     dashboard: ['Dashboard', "Overview of your institute's performance"],
     enquiries: ['Student Enquiries', 'Manage student enquiries and admissions'],
     jobs: ['Job Status', 'Track placement progress for every student'],
+    documents: ['Documents', 'Employment documents collected from students'],
     payments: ['Payments', 'Record and track course fee payments'],
     reports: ['Reports', 'Filter and export institute-wide data'],
     settings: ['Settings', 'Account and appearance preferences']

@@ -35,6 +35,9 @@ const JOB_STATUS_OPTIONS = [
   'Selected', 'Offer Received', 'Joined', 'Rejected'
 ];
 const PAYMENT_METHODS = ['Cash', 'UPI', 'Google Pay', 'PhonePe', 'Bank Transfer', 'Credit Card', 'Debit Card'];
+// What the payment was for. Records created before this field existed have
+// an empty value; it is required on every new or edited payment.
+const PAYMENT_TYPES = ['Training', 'Process', 'Documents'];
 const QUALIFICATION_OPTIONS = ['10th', '12th', 'Diploma', 'Graduate', 'Post Graduate', 'Other'];
 const COURSE_OPTIONS = [
   'Snowflake', 'Snowflake +DBT', 'Azure', 'Aws', 'Sap-Modules',
@@ -43,12 +46,12 @@ const COURSE_OPTIONS = [
 
 /* ---------------- In-memory store ---------------- */
 
-const db = { students: [], jobs: [], payments: [] };
+const db = { students: [], jobs: [], payments: [], documents: [] };
 // Append-only audit trail, mirroring tidb-server's *_log tables. One entry
-// per INSERT/UPDATE/DELETE on students/jobs/payments, recording who did it.
+// per INSERT/UPDATE/DELETE on students/jobs/payments/documents, recording who did it.
 // In-memory only (like the rest of this mock) — cleared on restart.
-const logs = { students: [], jobs: [], payments: [] };
-const counters = { year: {}, paymentSeq: 0, jobRow: 1000, paymentRow: 2000, logSeq: 0 };
+const logs = { students: [], jobs: [], payments: [], documents: [] };
+const counters = { year: {}, paymentSeq: 0, jobRow: 1000, paymentRow: 2000, documentRow: 3000, logSeq: 0 };
 const sessions = new Map(); // token -> { username, role, expiresAt }
 
 /** Records one audit-log entry. `session` is the { username, role } of the caller. */
@@ -88,6 +91,30 @@ function requireFields(data, fields) {
 }
 function isValidEmail(email) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email).trim()); }
 function isValidMobile(mobile) { return /^[6-9]\d{9}$/.test(String(mobile).trim()); }
+
+/** Accepts what the frontend might send over JSON (true, 'true', 1, 'on') and normalises it to a real boolean. */
+function toBool(v) {
+  if (typeof v === 'boolean') return v;
+  if (v === undefined || v === null) return false;
+  const s = String(v).trim().toLowerCase();
+  return s === 'true' || s === '1' || s === 'yes' || s === 'on';
+}
+
+/** Years of experience on a Documents record: optional, but must be a number between 0 and 60 when given. */
+function parseYears(value) {
+  if (isBlank(value)) return 0;
+  const n = Number(value);
+  if (!isFinite(n) || n < 0) throw new AppError('VALIDATION_ERROR', 'No of years must be a positive number.');
+  if (n > 60) throw new AppError('VALIDATION_ERROR', 'No of years looks too large — please check the value.');
+  return Math.round(n * 10) / 10;
+}
+
+/** A document's end date may not fall before its start date (both are optional). */
+function validateDocumentDates(startDate, endDate) {
+  if (!isBlank(startDate) && !isBlank(endDate) && String(endDate) < String(startDate)) {
+    throw new AppError('VALIDATION_ERROR', 'Doc end date cannot be before the doc start date.');
+  }
+}
 
 function buildDateCourseFilter(params, dateField) {
   const { dateFrom, dateTo, course } = params;
@@ -218,13 +245,13 @@ function requireRole(params, allowedRoles) {
 
 /* ---------------- Audit log (admin only) ---------------- */
 
-const AUDIT_ENTITIES = ['students', 'jobs', 'payments'];
+const AUDIT_ENTITIES = ['students', 'jobs', 'payments', 'documents'];
 
 function action_getAuditLog(params) {
   requireAdmin(params);
   const entity = String(params.entity || '').trim();
   if (!AUDIT_ENTITIES.includes(entity)) {
-    throw new AppError('VALIDATION_ERROR', 'entity must be one of: students, jobs, payments.');
+    throw new AppError('VALIDATION_ERROR', 'entity must be one of: students, jobs, payments, documents.');
   }
   let rows = logs[entity].slice();
   if (params.studentId) rows = rows.filter(r => r.student_id === String(params.studentId));
@@ -348,6 +375,7 @@ function assertNoDuplicateStudent(data, excludeStudentId) {
 function syncStudentNameEverywhere(studentId, name, course) {
   db.jobs.forEach(j => { if (j['Student ID'] === studentId) { j['Student Name'] = name; if (course) j['Course'] = course; } });
   db.payments.forEach(p => { if (p['Student ID'] === studentId) { p['Student Name'] = name; } });
+  db.documents.forEach(d => { if (d['Student ID'] === studentId) { d['Student Name'] = name; } });
 }
 
 function action_getStudents(params) {
@@ -504,25 +532,135 @@ function action_deleteJobStatus(params) {
   return { deleted: true };
 }
 
+/* ---------------- Documents (Module 4) ---------------- */
+
+function action_getDocuments(params) {
+  requireSession(params);
+  return paginateAndSort(db.documents, {
+    search: params.search, searchFields: ['Student ID', 'Student Name', 'Organization Name', 'Employee Role', 'Given By'],
+    filterFn: buildDateCourseFilter(params, 'Processed Date'),
+    sortBy: params.sortBy || 'CreatedAt', sortDir: params.sortDir || 'desc', page: params.page, pageSize: params.pageSize
+  });
+}
+
+function action_saveDocument(params) {
+  const session = requireRole(params, EMPLOYEE_ROLES);
+  const data = params.data || {};
+  requireFields(data, ['Student ID', 'Organization Name']);
+  const years = parseYears(data['No of Years']);
+  validateDocumentDates(data['Doc Start Date'], data['Doc End Date']);
+
+  const student = getStudentById(data['Student ID']);
+  if (!student) throw new AppError('NOT_FOUND', `No student found with ID ${data['Student ID']}.`);
+
+  const now = nowIso();
+  const row = {
+    _row: counters.documentRow++,
+    'Student ID': student['Student ID'], 'Student Name': student['Student Name'],
+    'Organization Name': data['Organization Name'], 'No of Years': years,
+    'Employee Role': data['Employee Role'] || '',
+    'Doc Start Date': data['Doc Start Date'] || '', 'Doc End Date': data['Doc End Date'] || '',
+    'Form 16': toBool(data['Form 16']), 'PF': toBool(data['PF']),
+    'Processed Date': todayISO(), // stamped server-side, never taken from the client
+    'Given By': data['Given By'] || '', 'CreatedAt': now, 'UpdatedAt': now
+  };
+  db.documents.push(row);
+  logChange('documents', { recordKey: row._row, studentId: row['Student ID'], action: 'INSERT', session, after: row });
+  return row;
+}
+
+function action_updateDocument(params) {
+  const session = requireRole(params, EMPLOYEE_ROLES);
+  const data = params.data || {};
+  requireFields(data, ['_row', 'Organization Name']);
+  const years = parseYears(data['No of Years']);
+  validateDocumentDates(data['Doc Start Date'], data['Doc End Date']);
+
+  const doc = db.documents.find(d => d._row === Number(data['_row']));
+  if (!doc) throw new AppError('NOT_FOUND', 'Document record not found.');
+
+  const before = JSON.parse(JSON.stringify(doc));
+  // 'Processed Date' is deliberately left alone — it records when the
+  // documents were first processed, not when the row was last edited.
+  Object.assign(doc, {
+    'Organization Name': data['Organization Name'], 'No of Years': years,
+    'Employee Role': data['Employee Role'] || '',
+    'Doc Start Date': data['Doc Start Date'] || '', 'Doc End Date': data['Doc End Date'] || '',
+    'Form 16': toBool(data['Form 16']), 'PF': toBool(data['PF']),
+    'Given By': data['Given By'] || '', 'UpdatedAt': nowIso()
+  });
+  logChange('documents', { recordKey: doc._row, studentId: doc['Student ID'], action: 'UPDATE', session, before, after: doc });
+  return doc;
+}
+
+function action_deleteDocument(params) {
+  const session = requireRole(params, EMPLOYEE_ROLES);
+  const rowIndex = Number(params.data && params.data['_row']);
+  const idx = db.documents.findIndex(d => d._row === rowIndex);
+  if (idx === -1) throw new AppError('NOT_FOUND', 'Document record not found.');
+  const before = db.documents[idx];
+  db.documents.splice(idx, 1);
+  logChange('documents', { recordKey: before._row, studentId: before['Student ID'], action: 'DELETE', session, before });
+  return { deleted: true };
+}
+
 /* ---------------- Payments (Module 3) ---------------- */
 
 function validatePaymentMethod(method) {
   if (!PAYMENT_METHODS.includes(method)) throw new AppError('VALIDATION_ERROR', 'Invalid payment method.');
 }
 
+function validatePaymentType(type) {
+  if (!PAYMENT_TYPES.includes(type)) throw new AppError('VALIDATION_ERROR', 'Invalid payment type.');
+}
+
+/**
+ * Returns the paid-so-far sum (excluding excludeRow, for edits), the row
+ * count (for the next installment number), the student's first installment
+ * — the one whose Payment Type governs the rest — and that governing type,
+ * skipping rows saved before the field existed (blank ones).
+ */
 function sumPaymentsForStudent(studentId, excludeRow) {
   const matches = db.payments.filter(p => p['Student ID'] === studentId);
   const sum = matches
     .filter(p => p._row !== excludeRow)
     .reduce((total, p) => total + (Number(p['Payment Received']) || 0), 0);
-  return { sum: round2(sum), count: matches.length };
+
+  const inOrder = matches.slice().sort((a, b) =>
+    (Number(a['Installment No']) || 0) - (Number(b['Installment No']) || 0) || a._row - b._row);
+  const governing = inOrder.find(p => !isBlank(p['Payment Type']));
+
+  return {
+    sum: round2(sum),
+    count: matches.length,
+    firstRow: inOrder.length ? inOrder[0]._row : null,
+    inheritedType: governing ? governing['Payment Type'] : ''
+  };
+}
+
+/**
+ * Payment Type is a property of the student, not of the individual payment:
+ * it is chosen on their first installment and every later one inherits it.
+ * So the client's value is honoured only when there is nothing to inherit —
+ * a brand-new student, or one whose payments all predate the field.
+ */
+function resolvePaymentType(inheritedType, requestedType) {
+  if (!isBlank(inheritedType)) return inheritedType;
+  requireFields({ 'Payment Type': requestedType }, ['Payment Type']);
+  validatePaymentType(requestedType);
+  return requestedType;
+}
+
+/** Applies one Payment Type to every payment a student has, so later installments never drift from the first one. */
+function syncPaymentTypeForStudent(studentId, paymentType) {
+  db.payments.forEach(p => { if (p['Student ID'] === studentId) p['Payment Type'] = paymentType; });
 }
 
 function action_getPayments(params) {
   requireAdmin(params); // Payments is an admin-only section — employees have no access at all
   const rows = params.latestOnly ? Object.values(latestPerStudent(db.payments)) : db.payments;
   return paginateAndSort(rows, {
-    search: params.search, searchFields: ['Payment ID', 'Student ID', 'Student Name', 'Payment Method'],
+    search: params.search, searchFields: ['Payment ID', 'Student ID', 'Student Name', 'Payment Method', 'Payment Type'],
     filterFn: buildDateCourseFilter(params, 'Payment Date'),
     sortBy: params.sortBy || 'CreatedAt', sortDir: params.sortDir || 'desc', page: params.page, pageSize: params.pageSize
   });
@@ -533,6 +671,8 @@ function action_savePayment(params) {
   const data = params.data || {};
   requireFields(data, ['Student ID', 'Total Course Fee', 'Payment Received', 'Payment Method']);
   validatePaymentMethod(data['Payment Method']);
+  // Payment Type is only read from the client for a student's first payment;
+  // later installments inherit it — see resolvePaymentType above.
 
   const totalFee = Number(data['Total Course Fee']);
   const received = Number(data['Payment Received']);
@@ -542,7 +682,8 @@ function action_savePayment(params) {
   const student = getStudentById(data['Student ID']);
   if (!student) throw new AppError('NOT_FOUND', `No student found with ID ${data['Student ID']}.`);
 
-  const { sum: existingSum, count: existingCount } = sumPaymentsForStudent(data['Student ID'], null);
+  const { sum: existingSum, count: existingCount, inheritedType } = sumPaymentsForStudent(data['Student ID'], null);
+  const paymentType = resolvePaymentType(inheritedType, data['Payment Type']);
   const pending = round2(totalFee - (existingSum + received));
   if (pending < 0) throw new AppError('OVERPAYMENT', `This payment exceeds the pending amount. Maximum allowed right now: ${round2(totalFee - existingSum)}.`);
 
@@ -553,6 +694,7 @@ function action_savePayment(params) {
     'Installment No': existingCount + 1,
     'Job Offer Date': data['Job Offer Date'] || '', 'Total Course Fee': totalFee,
     'Payment Received': received, 'Payment Method': data['Payment Method'],
+    'Payment Type': paymentType,
     'Pending Amount': pending, 'Payment Date': data['Payment Date'] || todayISO(),
     'CreatedAt': nowIso()
   };
@@ -566,6 +708,7 @@ function action_updatePayment(params) {
   const data = params.data || {};
   requireFields(data, ['_row', 'Total Course Fee', 'Payment Received', 'Payment Method']);
   validatePaymentMethod(data['Payment Method']);
+  // Payment Type is editable on the first installment only — see below.
 
   const totalFee = Number(data['Total Course Fee']);
   const received = Number(data['Payment Received']);
@@ -575,7 +718,8 @@ function action_updatePayment(params) {
   const payment = db.payments.find(p => p._row === Number(data['_row']));
   if (!payment) throw new AppError('NOT_FOUND', 'Payment record not found.');
 
-  const { sum: otherSum } = sumPaymentsForStudent(payment['Student ID'], payment._row);
+  const { sum: otherSum, firstRow } = sumPaymentsForStudent(payment['Student ID'], payment._row);
+  const isFirstInstallment = firstRow === payment._row;
   const pending = round2(totalFee - (otherSum + received));
   if (pending < 0) throw new AppError('OVERPAYMENT', `This payment exceeds the pending amount. Maximum allowed right now: ${round2(totalFee - otherSum)}.`);
 
@@ -585,6 +729,13 @@ function action_updatePayment(params) {
     'Payment Received': received, 'Payment Method': data['Payment Method'],
     'Pending Amount': pending, 'Payment Date': data['Payment Date'] || todayISO()
   });
+  // Editing a later installment leaves its type alone (it is inherited);
+  // editing the first one re-types every installment so they stay in step.
+  if (isFirstInstallment) {
+    requireFields(data, ['Payment Type']);
+    validatePaymentType(data['Payment Type']);
+    syncPaymentTypeForStudent(payment['Student ID'], data['Payment Type']);
+  }
   logChange('payments', { recordKey: payment['Payment ID'], studentId: payment['Student ID'], action: 'UPDATE', session, before, after: payment });
   return payment;
 }
@@ -711,6 +862,7 @@ function action_reports(params) {
 function seed() {
   const courses = COURSE_OPTIONS;
   const orgs = ['Infosys', 'TCS', 'Wipro', 'Accenture', 'Cognizant'];
+  const empRoles = ['Software Engineer', 'Data Analyst', 'Support Engineer', 'Test Engineer', 'Associate Consultant'];
   const names = ['Aarav Sharma', 'Diya Patel', 'Vihaan Reddy', 'Ananya Iyer', 'Kabir Singh', 'Ishita Nair', 'Reyansh Rao', 'Myra Gupta', 'Aditya Kumar', 'Saanvi Joshi', 'Arjun Mehta', 'Kiara Verma'];
 
   names.forEach((name, i) => {
@@ -745,6 +897,24 @@ function seed() {
       });
     }
 
+    // Experienced joiners (roughly every other seeded student) arrive with
+    // previous-employment documents; freshers have none.
+    if (i % 2 === 0) {
+      const startYear = 2018 + (i % 4);
+      const years = 1 + (i % 5) * 0.5;
+      db.documents.push({
+        _row: counters.documentRow++,
+        'Student ID': student['Student ID'], 'Student Name': student['Student Name'],
+        'Organization Name': orgs[(i + 2) % orgs.length], 'No of Years': years,
+        'Employee Role': empRoles[i % empRoles.length],
+        'Doc Start Date': `${startYear}-04-01`,
+        'Doc End Date': `${startYear + Math.ceil(years)}-03-31`,
+        'Form 16': i % 3 !== 1, 'PF': i % 4 !== 1,
+        'Processed Date': enquiryDate,
+        'Given By': i % 2 === 0 ? 'Student' : 'HR', 'CreatedAt': createdAt, 'UpdatedAt': createdAt
+      });
+    }
+
     if (i % 3 !== 2) {
       const fee = 40000 + (i % 4) * 10000;
       const received = i % 5 === 0 ? fee : Math.round(fee * (0.4 + (i % 3) * 0.2));
@@ -755,6 +925,7 @@ function seed() {
         'Installment No': 1,
         'Job Offer Date': '', 'Total Course Fee': fee, 'Payment Received': received,
         'Payment Method': PAYMENT_METHODS[i % PAYMENT_METHODS.length],
+        'Payment Type': PAYMENT_TYPES[i % PAYMENT_TYPES.length],
         'Pending Amount': round2(fee - received), 'Payment Date': enquiryDate, 'CreatedAt': createdAt
       });
     }
@@ -771,6 +942,7 @@ const ACTIONS = {
   getStudents: action_getStudents, addStudent: action_addStudent, updateStudent: action_updateStudent,
   deleteStudent: action_deleteStudent, searchStudent: action_searchStudent,
   getJobStatus: action_getJobStatus, saveJobStatus: action_saveJobStatus, updateJobStatus: action_updateJobStatus, deleteJobStatus: action_deleteJobStatus,
+  getDocuments: action_getDocuments, saveDocument: action_saveDocument, updateDocument: action_updateDocument, deleteDocument: action_deleteDocument,
   getPayments: action_getPayments, savePayment: action_savePayment, updatePayment: action_updatePayment, deletePayment: action_deletePayment,
   dashboardStats: action_dashboardStats, reports: action_reports,
   listUsers: action_listUsers, addUser: action_addUser, updateUser: action_updateUser, deleteUser: action_deleteUser,

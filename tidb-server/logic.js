@@ -14,6 +14,9 @@ const JOB_STATUS_OPTIONS = [
   'Selected', 'Offer Received', 'Joined', 'Rejected'
 ];
 const PAYMENT_METHODS = ['Cash', 'UPI', 'Google Pay', 'PhonePe', 'Bank Transfer', 'Credit Card', 'Debit Card'];
+// What the payment was for. Records created before this field existed have
+// an empty value; it is required on every new or edited payment.
+const PAYMENT_TYPES = ['Training', 'Process', 'Documents'];
 const QUALIFICATION_OPTIONS = ['10th', '12th', 'Diploma', 'Graduate', 'Post Graduate', 'Other'];
 const COURSE_OPTIONS = [
   'Snowflake', 'Snowflake +DBT', 'Azure', 'Aws', 'Sap-Modules',
@@ -54,6 +57,33 @@ function validateJobStatusValue(status) {
 }
 function validatePaymentMethod(method) {
   if (!PAYMENT_METHODS.includes(method)) throw new AppError('VALIDATION_ERROR', 'Invalid payment method.');
+}
+function validatePaymentType(type) {
+  if (!PAYMENT_TYPES.includes(type)) throw new AppError('VALIDATION_ERROR', 'Invalid payment type.');
+}
+
+/** Accepts what any of the three backends might receive over JSON (true, 'true', 1, 'on') and normalises it to a real boolean. */
+function toBool(v) {
+  if (typeof v === 'boolean') return v;
+  if (v === undefined || v === null) return false;
+  const s = String(v).trim().toLowerCase();
+  return s === 'true' || s === '1' || s === 'yes' || s === 'on';
+}
+
+/** Years of experience on a Documents record: optional, but must be a number between 0 and 60 when given. */
+function parseYears(value) {
+  if (isBlank(value)) return 0;
+  const n = Number(value);
+  if (!isFinite(n) || n < 0) throw new AppError('VALIDATION_ERROR', 'No of years must be a positive number.');
+  if (n > 60) throw new AppError('VALIDATION_ERROR', 'No of years looks too large — please check the value.');
+  return Math.round(n * 10) / 10;
+}
+
+/** A document's end date may not fall before its start date (both are optional). */
+function validateDocumentDates(startDate, endDate) {
+  if (!isBlank(startDate) && !isBlank(endDate) && String(endDate) < String(startDate)) {
+    throw new AppError('VALIDATION_ERROR', 'Doc end date cannot be before the doc start date.');
+  }
 }
 
 function buildDateCourseFilter(params, dateField) {
@@ -136,8 +166,9 @@ function hashPassword(password, salt) {
 
 module.exports = {
   AppError,
-  JOB_STATUS_OPTIONS, PAYMENT_METHODS, QUALIFICATION_OPTIONS, COURSE_OPTIONS,
+  JOB_STATUS_OPTIONS, PAYMENT_METHODS, PAYMENT_TYPES, QUALIFICATION_OPTIONS, COURSE_OPTIONS,
   todayISO, nowIso, round2, monthKey, isBlank, requireFields, isValidEmail, isValidMobile,
-  validateCourseValue, validateQualificationValue, validateJobStatusValue, validatePaymentMethod,
+  validateCourseValue, validateQualificationValue, validateJobStatusValue, validatePaymentMethod, validatePaymentType,
+  toBool, parseYears, validateDocumentDates,
   buildDateCourseFilter, paginateAndSort, last6Months, monthlySeries, latestPerStudent, hashPassword
 };

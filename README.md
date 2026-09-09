@@ -16,7 +16,7 @@ A production-ready Student Management Portal for NDR EDTECH.
 student-portal/
 ├── index.html          # entry point, redirects to login or dashboard
 ├── login.html           # admin login
-├── dashboard.html        # app shell: dashboard, enquiries, jobs, payments, reports, settings
+├── dashboard.html        # app shell: dashboard, enquiries, jobs, documents, payments, reports, settings
 ├── css/
 │   └── style.css
 ├── js/
@@ -27,7 +27,8 @@ student-portal/
 │   ├── enquiries.js          # Module 1 — Student Enquiries CRUD
 │   ├── jobs.js                # Module 2 — Job Status CRUD
 │   ├── payments.js             # Module 3 — Student Payments CRUD
-│   └── reports.js               # Reports + export
+│   ├── documents.js             # Module 4 — Documents CRUD
+│   └── reports.js                # Reports + export
 ├── assets/ images/ icons/
 ├── tidb-server/            # TiDB-backed backend (current production) — see tidb-server/README.md
 │   ├── schema.sql
@@ -40,6 +41,7 @@ student-portal/
 │   ├── Students.gs             # Module 1 backend
 │   ├── Jobs.gs                  # Module 2 backend
 │   ├── Payments.gs               # Module 3 backend
+│   ├── Documents.gs               # Module 4 backend
 │   ├── Dashboard.gs               # dashboard stats aggregation
 │   ├── Reports.gs                  # report filtering
 │   ├── Setup.gs                     # one-time sheet + admin bootstrap
@@ -77,7 +79,7 @@ See **[tidb-server/README.md](tidb-server/README.md)** — create a free TiDB Cl
 
 1. In the Apps Script editor, select the function `setup` from the function dropdown (top toolbar) and click **Run**.
 2. Authorize the script when prompted (it needs access to the spreadsheet).
-3. This creates all sheets with headers (`Config`, `Counters`, `Student Enquiries`, `Job Status`, `Student Payments`) and seeds a default admin login:
+3. This creates all sheets with headers (`Config`, `Counters`, `Student Enquiries`, `Job Status`, `Student Payments`, `Documents`) and seeds a default admin login:
    - **Username:** `admin`
    - **Password:** `Admin@123`
 4. Open the **View → Logs** (or Executions) to confirm `Setup complete.` was logged.

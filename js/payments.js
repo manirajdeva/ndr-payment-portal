@@ -18,6 +18,9 @@ const Payments = (() => {
   let editingRow = null; // row object being edited, used to exclude it from "already paid" totals
 
   const PAYMENT_METHODS = ['Cash', 'UPI', 'Google Pay', 'PhonePe', 'Bank Transfer', 'Credit Card', 'Debit Card'];
+  // What the payment was for. Payments saved before this field existed show
+  // blank here; the dropdown starts empty so editing one never guesses a value.
+  const PAYMENT_TYPES = ['Training', 'Process', 'Documents'];
 
   const exportColumns = [
     { key: 'Payment ID', label: 'Payment ID' },
@@ -29,12 +32,15 @@ const Payments = (() => {
     { key: 'Total Course Fee', label: 'Total Course Fee' },
     { key: 'Payment Received', label: 'Payment Received' },
     { key: 'Payment Method', label: 'Payment Method' },
+    { key: 'Payment Type', label: 'Payment Type' },
     { key: 'Pending Amount', label: 'Pending Amount' },
     { key: 'Payment Date', label: 'Payment Date' }
   ];
 
   function populateMethodDropdown() {
     document.getElementById('payMethod').innerHTML = PAYMENT_METHODS.map(m => `<option value="${m}">${m}</option>`).join('');
+    document.getElementById('payType').innerHTML =
+      `<option value="">Select payment type</option>` + PAYMENT_TYPES.map(t => `<option value="${t}">${t}</option>`).join('');
   }
 
   async function load() {
@@ -62,7 +68,7 @@ const Payments = (() => {
   function renderTable(rows) {
     const tbody = document.getElementById('payTableBody');
     if (!rows.length) {
-      tbody.innerHTML = `<tr><td colspan="11" class="text-center text-muted py-4">No payment records found.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="12" class="text-center text-muted py-4">No payment records found.</td></tr>`;
       return;
     }
     tbody.innerHTML = rows.map(row => {
@@ -79,6 +85,7 @@ const Payments = (() => {
         <td>${Utils.formatCurrency(row['Payment Received'])}</td>
         <td class="${pendingClass} fw-semibold">${Utils.formatCurrency(pending)}</td>
         <td>${Utils.escapeHtml(row['Payment Method'])}</td>
+        <td>${Utils.escapeHtml(row['Payment Type'] || '-')}</td>
         <td>${Utils.formatDate(row['Payment Date'])}</td>
         <td>
           ${row._pending ? Utils.pendingIndicatorHtml() : Auth.isAdmin() ? `
@@ -100,7 +107,7 @@ const Payments = (() => {
   async function openStudentPaymentsModal(studentId, studentName) {
     document.getElementById('studentPaymentsModalTitle').textContent = `Payment History — ${studentId}${studentName ? ' · ' + studentName : ''}`;
     const tbody = document.getElementById('studentPaymentsModalBody');
-    tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted py-4">Loading...</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted py-4">Loading...</td></tr>`;
     new bootstrap.Modal('#studentPaymentsModal').show();
 
     try {
@@ -110,7 +117,7 @@ const Payments = (() => {
         .sort((a, b) => (Number(a['Installment No']) || 0) - (Number(b['Installment No']) || 0));
 
       if (!matches.length) {
-        tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted py-4">No payments found for this student.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted py-4">No payments found for this student.</td></tr>`;
         return;
       }
 
@@ -125,11 +132,12 @@ const Payments = (() => {
           <td>${Utils.formatCurrency(row['Payment Received'])}</td>
           <td class="${pendingClass} fw-semibold">${Utils.formatCurrency(pending)}</td>
           <td>${Utils.escapeHtml(row['Payment Method'])}</td>
+          <td>${Utils.escapeHtml(row['Payment Type'] || '-')}</td>
           <td>${Utils.formatDate(row['Payment Date'])}</td>
         </tr>`;
       }).join('');
     } catch (err) {
-      tbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger py-4">${Utils.escapeHtml(err.message)}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="8" class="text-center text-danger py-4">${Utils.escapeHtml(err.message)}</td></tr>`;
     }
   }
 
@@ -141,6 +149,7 @@ const Payments = (() => {
     document.getElementById('payCourse').value = '';
     document.getElementById('payStudentResults').innerHTML = '';
     updatePendingPreview(0, 0);
+    applyPaymentTypeRule('', true);
   }
 
   let currentSummary = { totalPaid: 0, pendingBefore: 0 };
@@ -151,16 +160,52 @@ const Payments = (() => {
       `Already paid: ${Utils.formatCurrency(totalPaid)} · Pending before this payment: ${Utils.formatCurrency(pendingBefore)}`;
   }
 
-  /** Sums existing payment rows for a student (excluding the row currently being edited, if any). */
+  /**
+   * Sums existing payment rows for a student. `totalPaid` excludes the row
+   * currently being edited (if any); `inheritedType` and `firstRow` are
+   * computed over all of them, since the first installment's Payment Type
+   * governs every later one — mirroring the same rule on the backend.
+   */
   async function getStudentPaymentSummary(studentId) {
     const { rows } = await Api.getPayments({ search: studentId, page: 1, pageSize: 100000 });
-    const matches = rows.filter(r => r['Student ID'] === studentId && (!editingRow || r._row !== editingRow._row));
+    const all = rows.filter(r => r['Student ID'] === studentId);
+    const matches = all.filter(r => !editingRow || r._row !== editingRow._row);
     const totalPaid = matches.reduce((sum, r) => sum + (Number(r['Payment Received']) || 0), 0);
     let lastFee = 0, lastCreated = '';
     matches.forEach(r => {
       if (String(r['CreatedAt']) >= String(lastCreated)) { lastFee = Number(r['Total Course Fee']) || 0; lastCreated = r['CreatedAt']; }
     });
-    return { totalPaid, lastFee, pendingBefore: Math.max(0, lastFee - totalPaid) };
+
+    const inOrder = all.slice().sort((a, b) =>
+      (Number(a['Installment No']) || 0) - (Number(b['Installment No']) || 0) || a._row - b._row);
+    const governing = inOrder.find(r => r['Payment Type']);
+
+    return {
+      totalPaid, lastFee, pendingBefore: Math.max(0, lastFee - totalPaid),
+      firstRow: inOrder.length ? inOrder[0]._row : null,
+      inheritedType: governing ? governing['Payment Type'] : ''
+    };
+  }
+
+  /**
+   * Payment Type is chosen once, on a student's first installment; later
+   * installments inherit it and show it locked. `inheritedType` empty means
+   * this is the first payment (or the student's older ones predate the
+   * field), so the admin picks it here.
+   */
+  function applyPaymentTypeRule(inheritedType, editable) {
+    const select = document.getElementById('payType');
+    const hint = document.getElementById('payTypeHint');
+    if (inheritedType && !editable) {
+      select.value = inheritedType;
+      select.disabled = true;
+      hint.textContent = 'Set on this student\u2019s first installment \u2014 later installments inherit it.';
+      hint.classList.remove('d-none');
+    } else {
+      select.disabled = false;
+      hint.classList.toggle('d-none', !editable);
+      if (editable) hint.textContent = 'Applies to every installment for this student.';
+    }
   }
 
   function openAddModal() {
@@ -171,6 +216,7 @@ const Payments = (() => {
     resetStudentPicker();
     populateMethodDropdown();
     document.getElementById('payDate').value = Utils.todayISO();
+    applyPaymentTypeRule('', true); // until a student is picked, assume a first payment
     new bootstrap.Modal('#payModal').show();
   }
 
@@ -188,6 +234,7 @@ const Payments = (() => {
 
     const summary = await getStudentPaymentSummary(row['Student ID']);
     updatePendingPreview(summary.totalPaid, summary.pendingBefore);
+    applyPaymentTypeRule(row['Payment Type'] || summary.inheritedType, summary.firstRow === row._row);
   }
 
   /** Fills the form (and student picker) from a row-like object; used for edit and for restoring after a failed save. */
@@ -201,6 +248,7 @@ const Payments = (() => {
     document.getElementById('payTotalFee').value = row['Total Course Fee'];
     document.getElementById('payReceived').value = row['Payment Received'];
     document.getElementById('payMethod').value = row['Payment Method'];
+    document.getElementById('payType').value = row['Payment Type'] || '';
     document.getElementById('payDate').value = row['Payment Date'] || Utils.todayISO();
   }
 
@@ -210,6 +258,7 @@ const Payments = (() => {
       'Total Course Fee': Number(document.getElementById('payTotalFee').value),
       'Payment Received': Number(document.getElementById('payReceived').value),
       'Payment Method': document.getElementById('payMethod').value,
+      'Payment Type': document.getElementById('payType').value,
       'Payment Date': document.getElementById('payDate').value
     };
   }
@@ -224,6 +273,7 @@ const Payments = (() => {
       document.getElementById('payStudentName').value = '';
       document.getElementById('payCourse').value = '';
       updatePendingPreview(0, 0);
+      applyPaymentTypeRule('', true);
       if (!query) { results.innerHTML = ''; return; }
 
       try {
@@ -248,6 +298,7 @@ const Payments = (() => {
 
             const summary = await getStudentPaymentSummary(student['Student ID']);
             updatePendingPreview(summary.totalPaid, summary.pendingBefore);
+            applyPaymentTypeRule(summary.inheritedType, false);
             if (summary.lastFee > 0 && !document.getElementById('payTotalFee').value) {
               document.getElementById('payTotalFee').value = summary.lastFee;
             }

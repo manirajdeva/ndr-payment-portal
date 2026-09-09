@@ -15,9 +15,10 @@ const express = require('express');
 
 const store = require('./store');
 const {
-  AppError, JOB_STATUS_OPTIONS, PAYMENT_METHODS, COURSE_OPTIONS,
+  AppError, JOB_STATUS_OPTIONS, PAYMENT_METHODS, PAYMENT_TYPES, COURSE_OPTIONS,
   todayISO, nowIso, round2, monthKey, requireFields, isValidEmail, isValidMobile,
-  validateCourseValue, validateQualificationValue, validateJobStatusValue, validatePaymentMethod,
+  validateCourseValue, validateQualificationValue, validateJobStatusValue, validatePaymentMethod, validatePaymentType,
+  toBool, parseYears, validateDocumentDates,
   buildDateCourseFilter, paginateAndSort, monthlySeries, latestPerStudent, hashPassword, isBlank
 } = require('./logic');
 
@@ -230,14 +231,91 @@ async function action_deleteJobStatus(params) {
   return { deleted: true };
 }
 
+/* ---------------- Documents (Module 4) ---------------- */
+
+async function action_getDocuments(params) {
+  await requireSession(params);
+  const rows = await store.loadDocuments();
+  return paginateAndSort(rows, {
+    search: params.search, searchFields: ['Student ID', 'Student Name', 'Organization Name', 'Employee Role', 'Given By'],
+    filterFn: buildDateCourseFilter(params, 'Processed Date'),
+    sortBy: params.sortBy || 'CreatedAt', sortDir: params.sortDir || 'desc', page: params.page, pageSize: params.pageSize
+  });
+}
+
+async function action_saveDocument(params) {
+  const session = await requireRole(params, EMPLOYEE_ROLES);
+  const data = params.data || {};
+  requireFields(data, ['Student ID', 'Organization Name']);
+  const years = parseYears(data['No of Years']);
+  validateDocumentDates(data['Doc Start Date'], data['Doc End Date']);
+
+  return store.withTransaction(async conn => {
+    const student = await store.findStudentById(data['Student ID'], conn);
+    if (!student) throw new AppError('NOT_FOUND', `No student found with ID ${data['Student ID']}.`);
+
+    const now = nowIso();
+    const row = {
+      'Student ID': student['Student ID'], 'Student Name': student['Student Name'],
+      'Organization Name': data['Organization Name'], 'No of Years': years,
+      'Employee Role': data['Employee Role'] || '',
+      'Doc Start Date': data['Doc Start Date'] || '', 'Doc End Date': data['Doc End Date'] || '',
+      'Form 16': toBool(data['Form 16']), 'PF': toBool(data['PF']),
+      'Processed Date': todayISO(), // stamped server-side, never taken from the client
+      'Given By': data['Given By'] || '', 'CreatedAt': now, 'UpdatedAt': now
+    };
+    return store.insertDocument(conn, row, actorOf(session));
+  });
+}
+
+async function action_updateDocument(params) {
+  const session = await requireRole(params, EMPLOYEE_ROLES);
+  const data = params.data || {};
+  requireFields(data, ['_row', 'Organization Name']);
+  const years = parseYears(data['No of Years']);
+  validateDocumentDates(data['Doc Start Date'], data['Doc End Date']);
+
+  const update = {
+    'Organization Name': data['Organization Name'], 'No of Years': years,
+    'Employee Role': data['Employee Role'] || '',
+    'Doc Start Date': data['Doc Start Date'] || '', 'Doc End Date': data['Doc End Date'] || '',
+    'Form 16': toBool(data['Form 16']), 'PF': toBool(data['PF']),
+    'Given By': data['Given By'] || '', 'UpdatedAt': nowIso()
+  };
+  const affected = await store.withTransaction(conn => store.updateDocumentRow(conn, Number(data['_row']), update, actorOf(session)));
+  if (!affected) throw new AppError('NOT_FOUND', 'Document record not found.');
+  return update;
+}
+
+async function action_deleteDocument(params) {
+  const session = await requireRole(params, EMPLOYEE_ROLES);
+  const rowId = Number(params.data && params.data['_row']);
+  const affected = await store.deleteDocumentRow(rowId, actorOf(session));
+  if (!affected) throw new AppError('NOT_FOUND', 'Document record not found.');
+  return { deleted: true };
+}
+
 /* ---------------- Payments (Module 3) ---------------- */
+
+/**
+ * Payment Type is a property of the student, not of the individual payment:
+ * it is chosen on their first installment and every later one inherits it.
+ * So the client's value is honoured only when there is nothing to inherit —
+ * a brand-new student, or one whose payments all predate the field.
+ */
+function resolvePaymentType(inheritedType, requestedType) {
+  if (!isBlank(inheritedType)) return inheritedType;
+  requireFields({ 'Payment Type': requestedType }, ['Payment Type']);
+  validatePaymentType(requestedType);
+  return requestedType;
+}
 
 async function action_getPayments(params) {
   await requireAdmin(params); // Payments is an admin-only section — employees have no access at all
   let rows = await store.loadPayments();
   if (params.latestOnly) rows = Object.values(latestPerStudent(rows));
   return paginateAndSort(rows, {
-    search: params.search, searchFields: ['Payment ID', 'Student ID', 'Student Name', 'Payment Method'],
+    search: params.search, searchFields: ['Payment ID', 'Student ID', 'Student Name', 'Payment Method', 'Payment Type'],
     filterFn: buildDateCourseFilter(params, 'Payment Date'),
     sortBy: params.sortBy || 'CreatedAt', sortDir: params.sortDir || 'desc', page: params.page, pageSize: params.pageSize
   });
@@ -248,6 +326,8 @@ async function action_savePayment(params) {
   const data = params.data || {};
   requireFields(data, ['Student ID', 'Total Course Fee', 'Payment Received', 'Payment Method']);
   validatePaymentMethod(data['Payment Method']);
+  // Payment Type is only read from the client for a student's first payment;
+  // later installments inherit it — see resolvePaymentType below.
 
   const totalFee = Number(data['Total Course Fee']);
   const received = Number(data['Payment Received']);
@@ -258,7 +338,8 @@ async function action_savePayment(params) {
     const student = await store.findStudentById(data['Student ID'], conn);
     if (!student) throw new AppError('NOT_FOUND', `No student found with ID ${data['Student ID']}.`);
 
-    const { sum: existingSum, count: existingCount } = await store.sumPaymentsForStudent(conn, data['Student ID'], null);
+    const { sum: existingSum, count: existingCount, inheritedType } = await store.sumPaymentsForStudent(conn, data['Student ID'], null);
+    const paymentType = resolvePaymentType(inheritedType, data['Payment Type']);
     const pending = round2(totalFee - (existingSum + received));
     if (pending < 0) throw new AppError('OVERPAYMENT', `This payment exceeds the pending amount. Maximum allowed right now: ${round2(totalFee - existingSum)}.`);
 
@@ -268,6 +349,7 @@ async function action_savePayment(params) {
       'Installment No': existingCount + 1,
       'Job Offer Date': data['Job Offer Date'] || '', 'Total Course Fee': totalFee,
       'Payment Received': received, 'Payment Method': data['Payment Method'],
+      'Payment Type': paymentType,
       'Pending Amount': pending, 'Payment Date': data['Payment Date'] || todayISO(),
       'CreatedAt': nowIso()
     };
@@ -280,6 +362,7 @@ async function action_updatePayment(params) {
   const data = params.data || {};
   requireFields(data, ['_row', 'Total Course Fee', 'Payment Received', 'Payment Method']);
   validatePaymentMethod(data['Payment Method']);
+  // Payment Type is editable on the first installment only — see below.
 
   const totalFee = Number(data['Total Course Fee']);
   const received = Number(data['Payment Received']);
@@ -291,7 +374,8 @@ async function action_updatePayment(params) {
     const studentId = await store.getStudentIdForPaymentRow(conn, rowId);
     if (!studentId) throw new AppError('NOT_FOUND', 'Payment record not found.');
 
-    const { sum: otherSum } = await store.sumPaymentsForStudent(conn, studentId, rowId);
+    const { sum: otherSum, firstRowId } = await store.sumPaymentsForStudent(conn, studentId, rowId);
+    const isFirstInstallment = firstRowId === rowId;
     const pending = round2(totalFee - (otherSum + received));
     if (pending < 0) throw new AppError('OVERPAYMENT', `This payment exceeds the pending amount. Maximum allowed right now: ${round2(totalFee - otherSum)}.`);
 
@@ -300,7 +384,15 @@ async function action_updatePayment(params) {
       'Payment Received': received, 'Payment Method': data['Payment Method'],
       'Pending Amount': pending, 'Payment Date': data['Payment Date'] || todayISO()
     };
+    // Editing a later installment leaves its type alone (it is inherited);
+    // editing the first one re-types every installment so they stay in step.
+    if (isFirstInstallment) {
+      requireFields(data, ['Payment Type']);
+      validatePaymentType(data['Payment Type']);
+      update['Payment Type'] = data['Payment Type'];
+    }
     await store.updatePaymentRow(conn, rowId, update, actorOf(session));
+    if (isFirstInstallment) await store.syncPaymentTypeForStudent(conn, studentId, update['Payment Type']);
     return update;
   });
 }
@@ -423,13 +515,13 @@ async function action_reports(params) {
 
 /* ---------------- Audit log (admin only) ---------------- */
 
-const AUDIT_ENTITIES = ['students', 'jobs', 'payments'];
+const AUDIT_ENTITIES = ['students', 'jobs', 'payments', 'documents'];
 
 async function action_getAuditLog(params) {
   await requireAdmin(params);
   const entity = String(params.entity || '').trim();
   if (!AUDIT_ENTITIES.includes(entity)) {
-    throw new AppError('VALIDATION_ERROR', 'entity must be one of: students, jobs, payments.');
+    throw new AppError('VALIDATION_ERROR', 'entity must be one of: students, jobs, payments, documents.');
   }
   const rows = await store.loadAuditLog(entity, { studentId: params.studentId, recordKey: params.recordKey });
   return paginateAndSort(rows, {
@@ -528,6 +620,7 @@ const ACTIONS = {
   getStudents: action_getStudents, addStudent: action_addStudent, updateStudent: action_updateStudent,
   deleteStudent: action_deleteStudent, searchStudent: action_searchStudent,
   getJobStatus: action_getJobStatus, saveJobStatus: action_saveJobStatus, updateJobStatus: action_updateJobStatus, deleteJobStatus: action_deleteJobStatus,
+  getDocuments: action_getDocuments, saveDocument: action_saveDocument, updateDocument: action_updateDocument, deleteDocument: action_deleteDocument,
   getPayments: action_getPayments, savePayment: action_savePayment, updatePayment: action_updatePayment, deletePayment: action_deletePayment,
   dashboardStats: action_dashboardStats, reports: action_reports,
   listUsers: action_listUsers, addUser: action_addUser, updateUser: action_updateUser, deleteUser: action_deleteUser,
