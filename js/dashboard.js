@@ -221,7 +221,8 @@ const Dashboard = (() => {
   function renderPlacementChart(counts) {
     const ctx = document.getElementById('placementChart');
     const labels = Object.keys(counts);
-    const colors = ['#94a3b8', '#38bdf8', '#a78bfa', '#22d3ee', '#4ade80', '#1e5eff', '#16a34a', '#dc2626'];
+    // Same order, and the same colours, as the Job Status badges in jobs.js.
+    const colors = ['#94a3b8', '#38bdf8', '#a78bfa', '#22d3ee', '#0ea5e9', '#16a34a', '#dc2626', '#f59e0b'];
     charts.placement?.destroy();
     charts.placement = new Chart(ctx, {
       type: 'doughnut',

@@ -18,19 +18,21 @@ function action_dashboardStats(params) {
   var newEnquiries = students.filter(function (s) { return monthKey_(s['Enquiry Date']) === thisMonth; }).length;
 
   var latestJobByStudent = latestPerStudent_(jobs);
-  var placedStatuses = ['Selected', 'Offer Received', 'Joined'];
-  var studentsJoined = 0, studentsPlaced = 0, rejected = 0;
+  var studentsJoined = 0, studentsPlaced = 0, rejected = 0, inactive = 0;
   var placementCounts = {};
   JOB_STATUS_OPTIONS.forEach(function (s) { placementCounts[s] = 0; });
 
   Object.keys(latestJobByStudent).forEach(function (id) {
-    var status = latestJobByStudent[id]['Job Status'];
+    var status = normalizeJobStatus_(latestJobByStudent[id]['Job Status']);
     if (placementCounts.hasOwnProperty(status)) placementCounts[status]++;
-    if (status === 'Joined') studentsJoined++;
-    if (placedStatuses.indexOf(status) !== -1) studentsPlaced++;
+    if (status === JOINED_JOB_STATUS) studentsJoined++;
+    if (PLACED_JOB_STATUSES.indexOf(status) !== -1) studentsPlaced++;
     if (status === 'Rejected') rejected++;
+    if (status === INACTIVE_JOB_STATUS) inactive++;
   });
-  var pendingPlacements = Math.max(0, students.length - studentsPlaced - rejected);
+  // An in-active student is no longer awaiting placement, so they drop out
+  // of the pending count the same way a rejected one does.
+  var pendingPlacements = Math.max(0, students.length - studentsPlaced - rejected - inactive);
 
   var totalPayments = 0;
   var paymentsByStudent = {};
@@ -92,7 +94,7 @@ function buildRecentActivities_(students, jobs, payments) {
     activities.push({
       type: 'Job Status',
       icon: 'fa-briefcase',
-      text: j['Student Name'] + ' (' + j['Student ID'] + ') marked as ' + j['Job Status'],
+      text: j['Student Name'] + ' (' + j['Student ID'] + ') marked as ' + normalizeJobStatus_(j['Job Status']),
       at: j['UpdatedAt'] || j['CreatedAt']
     });
   });

@@ -15,9 +15,10 @@ const express = require('express');
 
 const store = require('./store');
 const {
-  AppError, JOB_STATUS_OPTIONS, PAYMENT_METHODS, PAYMENT_TYPES, COURSE_OPTIONS,
+  AppError, JOB_STATUS_OPTIONS, PLACED_JOB_STATUSES, JOINED_JOB_STATUS, INACTIVE_JOB_STATUS,
+  PAYMENT_METHODS, PAYMENT_TYPES, COURSE_OPTIONS,
   todayISO, nowIso, round2, monthKey, requireFields, isValidEmail, isValidMobile,
-  validateCourseValue, validateQualificationValue, validateJobStatusValue, validatePaymentMethod, validatePaymentType,
+  validateCourseValue, validateQualificationValue, normalizeJobStatus, validateJobStatusValue, validatePaymentMethod, validatePaymentType,
   toBool, parseYears, validateDocumentDates,
   buildDateCourseFilter, paginateAndSort, monthlySeries, latestPerStudent, hashPassword, isBlank
 } = require('./logic');
@@ -199,7 +200,7 @@ async function action_saveJobStatus(params) {
     const now = nowIso();
     const row = {
       'Student ID': student['Student ID'], 'Student Name': student['Student Name'],
-      'Office Joining Date': data['Office Joining Date'] || '', 'Job Status': data['Job Status'],
+      'Office Joining Date': data['Office Joining Date'] || '', 'Job Status': normalizeJobStatus(data['Job Status']),
       'Course': student['Course'], 'Organization': data['Organization'] || '',
       'Job Joining Date': data['Job Joining Date'] || '', 'CreatedAt': now, 'UpdatedAt': now
     };
@@ -214,7 +215,7 @@ async function action_updateJobStatus(params) {
   validateJobStatusValue(data['Job Status']);
 
   const update = {
-    'Office Joining Date': data['Office Joining Date'] || '', 'Job Status': data['Job Status'],
+    'Office Joining Date': data['Office Joining Date'] || '', 'Job Status': normalizeJobStatus(data['Job Status']),
     'Organization': data['Organization'] || '', 'Job Joining Date': data['Job Joining Date'] || '',
     'UpdatedAt': nowIso()
   };
@@ -417,18 +418,20 @@ async function action_dashboardStats(params) {
   const newEnquiries = students.filter(s => monthKey(s['Enquiry Date']) === thisMonth).length;
 
   const latestJobByStudent = latestPerStudent(jobs);
-  const placedStatuses = ['Selected', 'Offer Received', 'Joined'];
-  let studentsJoined = 0, studentsPlaced = 0, rejected = 0;
+  let studentsJoined = 0, studentsPlaced = 0, rejected = 0, inactive = 0;
   const placementCounts = {};
   JOB_STATUS_OPTIONS.forEach(s => (placementCounts[s] = 0));
   Object.values(latestJobByStudent).forEach(job => {
-    const status = job['Job Status'];
+    const status = normalizeJobStatus(job['Job Status']);
     if (status in placementCounts) placementCounts[status]++;
-    if (status === 'Joined') studentsJoined++;
-    if (placedStatuses.includes(status)) studentsPlaced++;
+    if (status === JOINED_JOB_STATUS) studentsJoined++;
+    if (PLACED_JOB_STATUSES.includes(status)) studentsPlaced++;
     if (status === 'Rejected') rejected++;
+    if (status === INACTIVE_JOB_STATUS) inactive++;
   });
-  const pendingPlacements = Math.max(0, students.length - studentsPlaced - rejected);
+  // An in-active student is no longer awaiting placement, so they drop out
+  // of the pending count the same way a rejected one does.
+  const pendingPlacements = Math.max(0, students.length - studentsPlaced - rejected - inactive);
 
   let totalPayments = 0;
   const paymentsByStudent = {};
@@ -494,7 +497,7 @@ async function action_reports(params) {
     return {
       'Student ID': s['Student ID'], 'Student Name': s['Student Name'], 'Enquiry Date': s['Enquiry Date'],
       'Course': s['Course'], 'Mobile Number': s['Mobile Number'], 'Gmail': s['Gmail'],
-      'Job Status': job['Job Status'] || 'Pending', 'Organization': job['Organization'] || '',
+      'Job Status': normalizeJobStatus(job['Job Status'] || 'Enrolled'), 'Organization': job['Organization'] || '',
       'Total Course Fee': pay.fee, 'Payment Received': round2(pay.received), 'Pending Amount': pending,
       'Payment Status': paymentStatus, 'Last Payment Date': pay.lastDate || ''
     };

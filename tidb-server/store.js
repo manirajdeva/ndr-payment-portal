@@ -135,16 +135,41 @@ async function applyColumnMigrations() {
 }
 
 /**
+ * Job statuses renamed when the Job Status dropdown was replaced. Rows still
+ * holding an old value are rewritten once so the stored data matches the
+ * options the form now offers. Idempotent: after the first run these match
+ * nothing. Reads go through normalizeJobStatus anyway, so a row that somehow
+ * escapes this still displays under its new name.
+ */
+const RENAMED_JOB_STATUSES = [
+  ['Pending', 'Enrolled'],
+  ['Interview Scheduled', 'Scheduling Interview'],
+  ['Selected', 'Offer Received'],
+  ['Joined', 'Job Joined']
+];
+
+async function applyJobStatusMigration() {
+  for (const [from, to] of RENAMED_JOB_STATUSES) {
+    const [result] = await pool.query('UPDATE jobs SET job_status = ? WHERE job_status = ?', [to, from]);
+    if (result.affectedRows) {
+      console.log(`Migration: job_status '${from}' -> '${to}' (${result.affectedRows} row(s))`);
+    }
+  }
+}
+
+/**
  * Runs schema.sql (every statement is CREATE TABLE IF NOT EXISTS, so this
  * is idempotent), then adds any column introduced after a table was first
- * created. Called once on server startup so a deploy — new audit-log tables
- * and new columns included — needs no manual migration step.
+ * created and renames any superseded job status. Called once on server
+ * startup so a deploy — new audit-log tables and new columns included —
+ * needs no manual migration step.
  */
 async function ensureSchema() {
   const sql = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
   const statements = sql.split(/;\s*(?:\r?\n|$)/).map(s => s.trim()).filter(Boolean);
   for (const statement of statements) await pool.query(statement);
   await applyColumnMigrations();
+  await applyJobStatusMigration();
 }
 
 /* ---------------- Students ---------------- */
@@ -227,8 +252,13 @@ async function syncStudentNameEverywhere(conn, studentId, name, course) {
 /* ---------------- Jobs ---------------- */
 
 async function loadJobs() {
+  const { normalizeJobStatus } = require('./logic');
   const [rows] = await pool.query('SELECT * FROM jobs');
-  return rows.map(r => toDisplay(r, JOB_COLS, true));
+  return rows.map(r => {
+    const row = toDisplay(r, JOB_COLS, true);
+    row['Job Status'] = normalizeJobStatus(row['Job Status']);
+    return row;
+  });
 }
 
 async function insertJob(conn, row, actor) {

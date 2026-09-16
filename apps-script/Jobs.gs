@@ -4,14 +4,41 @@
  */
 
 var JOB_STATUS_OPTIONS = [
-  'Pending', 'Training', 'Interview Scheduled', 'Interview Cleared',
-  'Selected', 'Offer Received', 'Joined', 'Rejected'
+  'Enrolled', 'Training', 'Scheduling Interview', 'Interview Cleared',
+  'Offer Received', 'Job Joined', 'Rejected', 'In-active'
 ];
+/**
+ * Job statuses used before the list above replaced them. Sheet rows written
+ * under an old name are mapped whenever they are read or re-saved, so the
+ * existing spreadsheet keeps working without a manual find-and-replace.
+ * 'Selected' has no 1:1 successor — it folds into 'Offer Received', which
+ * keeps those students inside the "Students Placed" count.
+ */
+var LEGACY_JOB_STATUS_MAP = {
+  'Pending': 'Enrolled',
+  'Interview Scheduled': 'Scheduling Interview',
+  'Selected': 'Offer Received',
+  'Joined': 'Job Joined'
+};
+/** Statuses that count a student as placed, and the one that counts as joined. */
+var PLACED_JOB_STATUSES = ['Offer Received', 'Job Joined'];
+var JOINED_JOB_STATUS = 'Job Joined';
+var INACTIVE_JOB_STATUS = 'In-active';
+
+function normalizeJobStatus_(status) {
+  var value = String(status === null || status === undefined ? '' : status).trim();
+  return LEGACY_JOB_STATUS_MAP[value] || value;
+}
 
 function action_getJobStatus(params) {
   requireSession_(params);
   var sheet = getSheet_(SHEET_NAMES.JOBS);
-  var rows = readAllRows_(sheet);
+  // Map superseded statuses before search/sort so filtering and searching
+  // work against the names the UI now shows.
+  var rows = readAllRows_(sheet).map(function (row) {
+    row['Job Status'] = normalizeJobStatus_(row['Job Status']);
+    return row;
+  });
   var result = paginateAndSort_(rows, {
     search: params.search,
     searchFields: ['Student ID', 'Student Name', 'Organization', 'Job Status'],
@@ -44,7 +71,7 @@ function action_saveJobStatus(params) {
       'Student ID': student['Student ID'],
       'Student Name': student['Student Name'],
       'Office Joining Date': data['Office Joining Date'] || '',
-      'Job Status': data['Job Status'],
+      'Job Status': normalizeJobStatus_(data['Job Status']),
       'Course': student['Course'],
       'Organization': data['Organization'] || '',
       'Job Joining Date': data['Job Joining Date'] || '',
@@ -75,7 +102,7 @@ function action_updateJobStatus(params) {
     }
     var update = {
       'Office Joining Date': data['Office Joining Date'] || '',
-      'Job Status': data['Job Status'],
+      'Job Status': normalizeJobStatus_(data['Job Status']),
       'Organization': data['Organization'] || '',
       'Job Joining Date': data['Job Joining Date'] || '',
       'UpdatedAt': nowIso_()
@@ -106,7 +133,7 @@ function action_deleteJobStatus(params) {
 }
 
 function validateJobStatusValue_(status) {
-  if (JOB_STATUS_OPTIONS.indexOf(status) === -1) {
+  if (JOB_STATUS_OPTIONS.indexOf(normalizeJobStatus_(status)) === -1) {
     throw new AppError_('VALIDATION_ERROR', 'Invalid job status value.');
   }
 }

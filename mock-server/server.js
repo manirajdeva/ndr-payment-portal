@@ -31,9 +31,25 @@ const EMPLOYEE_ROLES = ['employee', 'hr'];
 const USER_ROLES = ['admin', 'employee'];
 
 const JOB_STATUS_OPTIONS = [
-  'Pending', 'Training', 'Interview Scheduled', 'Interview Cleared',
-  'Selected', 'Offer Received', 'Joined', 'Rejected'
+  'Enrolled', 'Training', 'Scheduling Interview', 'Interview Cleared',
+  'Offer Received', 'Job Joined', 'Rejected', 'In-active'
 ];
+/**
+ * Job statuses used before the list above replaced them, mapped on the way
+ * in so a client still sending an old name keeps working. 'Selected' has no
+ * 1:1 successor — it folds into 'Offer Received', which keeps those students
+ * inside the "Students Placed" count they were already part of.
+ */
+const LEGACY_JOB_STATUS_MAP = {
+  'Pending': 'Enrolled',
+  'Interview Scheduled': 'Scheduling Interview',
+  'Selected': 'Offer Received',
+  'Joined': 'Job Joined'
+};
+/** Statuses that count a student as placed, and the one that counts as joined. */
+const PLACED_JOB_STATUSES = ['Offer Received', 'Job Joined'];
+const JOINED_JOB_STATUS = 'Job Joined';
+const INACTIVE_JOB_STATUS = 'In-active';
 const PAYMENT_METHODS = ['Cash', 'UPI', 'Google Pay', 'PhonePe', 'Bank Transfer', 'Credit Card', 'Debit Card'];
 // What the payment was for. Records created before this field existed have
 // an empty value; it is required on every new or edited payment.
@@ -467,8 +483,15 @@ function action_deleteStudent(params) {
 
 /* ---------------- Job Status (Module 2) ---------------- */
 
+function normalizeJobStatus(status) {
+  const value = String(status === null || status === undefined ? '' : status).trim();
+  return LEGACY_JOB_STATUS_MAP[value] || value;
+}
+
 function validateJobStatusValue(status) {
-  if (!JOB_STATUS_OPTIONS.includes(status)) throw new AppError('VALIDATION_ERROR', 'Invalid job status value.');
+  if (!JOB_STATUS_OPTIONS.includes(normalizeJobStatus(status))) {
+    throw new AppError('VALIDATION_ERROR', 'Invalid job status value.');
+  }
 }
 
 function action_getJobStatus(params) {
@@ -493,7 +516,7 @@ function action_saveJobStatus(params) {
   const row = {
     _row: counters.jobRow++,
     'Student ID': student['Student ID'], 'Student Name': student['Student Name'],
-    'Office Joining Date': data['Office Joining Date'] || '', 'Job Status': data['Job Status'],
+    'Office Joining Date': data['Office Joining Date'] || '', 'Job Status': normalizeJobStatus(data['Job Status']),
     'Course': student['Course'], 'Organization': data['Organization'] || '',
     'Job Joining Date': data['Job Joining Date'] || '', 'CreatedAt': now, 'UpdatedAt': now
   };
@@ -513,7 +536,7 @@ function action_updateJobStatus(params) {
 
   const before = JSON.parse(JSON.stringify(job));
   Object.assign(job, {
-    'Office Joining Date': data['Office Joining Date'] || '', 'Job Status': data['Job Status'],
+    'Office Joining Date': data['Office Joining Date'] || '', 'Job Status': normalizeJobStatus(data['Job Status']),
     'Organization': data['Organization'] || '', 'Job Joining Date': data['Job Joining Date'] || '',
     'UpdatedAt': nowIso()
   });
@@ -763,18 +786,20 @@ function action_dashboardStats(params) {
   const newEnquiries = students.filter(s => monthKey(s['Enquiry Date']) === thisMonth).length;
 
   const latestJobByStudent = latestPerStudent(jobs);
-  const placedStatuses = ['Selected', 'Offer Received', 'Joined'];
-  let studentsJoined = 0, studentsPlaced = 0, rejected = 0;
+  let studentsJoined = 0, studentsPlaced = 0, rejected = 0, inactive = 0;
   const placementCounts = {};
   JOB_STATUS_OPTIONS.forEach(s => (placementCounts[s] = 0));
   Object.values(latestJobByStudent).forEach(job => {
-    const status = job['Job Status'];
+    const status = normalizeJobStatus(job['Job Status']);
     if (status in placementCounts) placementCounts[status]++;
-    if (status === 'Joined') studentsJoined++;
-    if (placedStatuses.includes(status)) studentsPlaced++;
+    if (status === JOINED_JOB_STATUS) studentsJoined++;
+    if (PLACED_JOB_STATUSES.includes(status)) studentsPlaced++;
     if (status === 'Rejected') rejected++;
+    if (status === INACTIVE_JOB_STATUS) inactive++;
   });
-  const pendingPlacements = Math.max(0, students.length - studentsPlaced - rejected);
+  // An in-active student is no longer awaiting placement, so they drop out
+  // of the pending count the same way a rejected one does.
+  const pendingPlacements = Math.max(0, students.length - studentsPlaced - rejected - inactive);
 
   let totalPayments = 0;
   const paymentsByStudent = {};
@@ -838,7 +863,7 @@ function action_reports(params) {
     return {
       'Student ID': s['Student ID'], 'Student Name': s['Student Name'], 'Enquiry Date': s['Enquiry Date'],
       'Course': s['Course'], 'Mobile Number': s['Mobile Number'], 'Gmail': s['Gmail'],
-      'Job Status': job['Job Status'] || 'Pending', 'Organization': job['Organization'] || '',
+      'Job Status': normalizeJobStatus(job['Job Status'] || 'Enrolled'), 'Organization': job['Organization'] || '',
       'Total Course Fee': pay.fee, 'Payment Received': round2(pay.received), 'Pending Amount': pending,
       'Payment Status': paymentStatus, 'Last Payment Date': pay.lastDate || ''
     };
@@ -887,7 +912,7 @@ function seed() {
     db.students.push(student);
 
     if (i % 4 !== 3) {
-      const statuses = ['Training', 'Interview Scheduled', 'Interview Cleared', 'Selected', 'Offer Received', 'Joined', 'Rejected', 'Pending'];
+      const statuses = ['Training', 'Scheduling Interview', 'Interview Cleared', 'Offer Received', 'Job Joined', 'Rejected', 'In-active', 'Enrolled'];
       db.jobs.push({
         _row: counters.jobRow++,
         'Student ID': student['Student ID'], 'Student Name': student['Student Name'],

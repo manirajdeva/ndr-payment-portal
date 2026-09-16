@@ -17,14 +17,34 @@ const Jobs = (() => {
   let selectedStudent = null;
 
   const JOB_STATUS_OPTIONS = [
-    'Pending', 'Training', 'Interview Scheduled', 'Interview Cleared',
-    'Selected', 'Offer Received', 'Joined', 'Rejected'
+    'Enrolled', 'Training', 'Scheduling Interview', 'Interview Cleared',
+    'Offer Received', 'Job Joined', 'Rejected', 'In-active'
   ];
 
+  /**
+   * Statuses this dropdown used before the list above replaced them. Rows
+   * saved under an old name are mapped on read so an existing record still
+   * selects a real option in the Edit form. 'Selected' has no 1:1 successor
+   * — it sat between clearing the interview and joining, so it folds into
+   * 'Offer Received', which keeps those students in the "Students Placed"
+   * count they were already part of.
+   */
+  const LEGACY_JOB_STATUS_MAP = {
+    'Pending': 'Enrolled',
+    'Interview Scheduled': 'Scheduling Interview',
+    'Selected': 'Offer Received',
+    'Joined': 'Job Joined'
+  };
+
+  function normalizeJobStatus(status) {
+    const value = String(status === null || status === undefined ? '' : status).trim();
+    return LEGACY_JOB_STATUS_MAP[value] || value;
+  }
+
   const statusColors = {
-    'Pending': '#94a3b8', 'Training': '#38bdf8', 'Interview Scheduled': '#a78bfa',
-    'Interview Cleared': '#22d3ee', 'Selected': '#1e5eff', 'Offer Received': '#0ea5e9',
-    'Joined': '#16a34a', 'Rejected': '#dc2626'
+    'Enrolled': '#94a3b8', 'Training': '#38bdf8', 'Scheduling Interview': '#a78bfa',
+    'Interview Cleared': '#22d3ee', 'Offer Received': '#0ea5e9', 'Job Joined': '#16a34a',
+    'Rejected': '#dc2626', 'In-active': '#f59e0b'
   };
 
   const exportColumns = [
@@ -37,9 +57,17 @@ const Jobs = (() => {
     { key: 'Job Joining Date', label: 'Job Joining Date' }
   ];
 
-  function populateStatusDropdown() {
+  /**
+   * Rebuilds the Job Status options. A record whose stored status is neither
+   * a current option nor a known legacy one keeps its own value as an extra
+   * option, so opening Edit never silently rewrites it to the first entry.
+   */
+  function populateStatusDropdown(currentStatus) {
     const select = document.getElementById('jobStatus');
-    select.innerHTML = JOB_STATUS_OPTIONS.map(s => `<option value="${s}">${s}</option>`).join('');
+    const current = normalizeJobStatus(currentStatus);
+    const options = JOB_STATUS_OPTIONS.slice();
+    if (current && !options.includes(current)) options.push(current);
+    select.innerHTML = options.map(s => `<option value="${Utils.escapeHtml(s)}">${Utils.escapeHtml(s)}</option>`).join('');
   }
 
   async function load() {
@@ -65,8 +93,9 @@ const Jobs = (() => {
   }
 
   function statusBadge(status) {
-    const color = statusColors[status] || '#94a3b8';
-    return `<span class="badge-status" style="background:${color}22; color:${color};">${Utils.escapeHtml(status)}</span>`;
+    const label = normalizeJobStatus(status);
+    const color = statusColors[label] || '#94a3b8';
+    return `<span class="badge-status" style="background:${color}22; color:${color};">${Utils.escapeHtml(label)}</span>`;
   }
 
   function renderTable(rows) {
@@ -118,7 +147,7 @@ const Jobs = (() => {
   function openEditModal(rowIndex) {
     const row = cache.find(r => r._row === rowIndex);
     if (!row) return;
-    populateStatusDropdown();
+    populateStatusDropdown(row['Job Status']);
     fillForm(row);
     document.getElementById('jobModalTitle').textContent = 'Edit Job Status';
     document.getElementById('jobRowHidden').value = rowIndex;
@@ -132,7 +161,7 @@ const Jobs = (() => {
     document.getElementById('jobStudentSearch').readOnly = true; // student link can't change on edit
     document.getElementById('jobStudentName').value = row['Student Name'];
     document.getElementById('jobCourse').value = row['Course'];
-    document.getElementById('jobStatus').value = row['Job Status'];
+    document.getElementById('jobStatus').value = normalizeJobStatus(row['Job Status']);
     document.getElementById('jobOrganization').value = row['Organization'] || '';
     document.getElementById('jobOfficeJoiningDate').value = row['Office Joining Date'] || '';
     document.getElementById('jobJoiningDate').value = row['Job Joining Date'] || '';
@@ -282,7 +311,7 @@ const Jobs = (() => {
   function reopenModalWithData(title, rowIndex, student, data) {
     document.getElementById('jobModalTitle').textContent = title;
     document.getElementById('jobRowHidden').value = rowIndex;
-    populateStatusDropdown();
+    populateStatusDropdown(data['Job Status']);
     fillForm(Object.assign({}, student, data));
     if (!rowIndex) document.getElementById('jobStudentSearch').readOnly = false; // re-allow picking a different student on Add retry
     new bootstrap.Modal('#jobModal').show();
@@ -376,7 +405,7 @@ const Jobs = (() => {
     wireEvents();
   }
 
-  return { init, load, JOB_STATUS_OPTIONS };
+  return { init, load, JOB_STATUS_OPTIONS, normalizeJobStatus };
 })();
 
 document.addEventListener('DOMContentLoaded', () => {

@@ -10,9 +10,26 @@
 const crypto = require('crypto');
 
 const JOB_STATUS_OPTIONS = [
-  'Pending', 'Training', 'Interview Scheduled', 'Interview Cleared',
-  'Selected', 'Offer Received', 'Joined', 'Rejected'
+  'Enrolled', 'Training', 'Scheduling Interview', 'Interview Cleared',
+  'Offer Received', 'Job Joined', 'Rejected', 'In-active'
 ];
+/**
+ * Job statuses used before the list above replaced them. Values are mapped
+ * on the way in and on the way out so rows written under an old name still
+ * validate, display, filter and aggregate correctly. 'Selected' folds into
+ * 'Offer Received' — it has no 1:1 successor, and that keeps those students
+ * inside the "Students Placed" count they were already part of.
+ */
+const LEGACY_JOB_STATUS_MAP = {
+  'Pending': 'Enrolled',
+  'Interview Scheduled': 'Scheduling Interview',
+  'Selected': 'Offer Received',
+  'Joined': 'Job Joined'
+};
+/** Statuses that count a student as placed, and the one that counts as joined. */
+const PLACED_JOB_STATUSES = ['Offer Received', 'Job Joined'];
+const JOINED_JOB_STATUS = 'Job Joined';
+const INACTIVE_JOB_STATUS = 'In-active';
 const PAYMENT_METHODS = ['Cash', 'UPI', 'Google Pay', 'PhonePe', 'Bank Transfer', 'Credit Card', 'Debit Card'];
 // What the payment was for. Records created before this field existed have
 // an empty value; it is required on every new or edited payment.
@@ -52,8 +69,14 @@ function validateQualificationValue(qualification) {
     throw new AppError('VALIDATION_ERROR', 'Invalid qualification value.');
   }
 }
+function normalizeJobStatus(status) {
+  const value = String(status === null || status === undefined ? '' : status).trim();
+  return LEGACY_JOB_STATUS_MAP[value] || value;
+}
 function validateJobStatusValue(status) {
-  if (!JOB_STATUS_OPTIONS.includes(status)) throw new AppError('VALIDATION_ERROR', 'Invalid job status value.');
+  if (!JOB_STATUS_OPTIONS.includes(normalizeJobStatus(status))) {
+    throw new AppError('VALIDATION_ERROR', 'Invalid job status value.');
+  }
 }
 function validatePaymentMethod(method) {
   if (!PAYMENT_METHODS.includes(method)) throw new AppError('VALIDATION_ERROR', 'Invalid payment method.');
@@ -166,9 +189,10 @@ function hashPassword(password, salt) {
 
 module.exports = {
   AppError,
-  JOB_STATUS_OPTIONS, PAYMENT_METHODS, PAYMENT_TYPES, QUALIFICATION_OPTIONS, COURSE_OPTIONS,
+  JOB_STATUS_OPTIONS, LEGACY_JOB_STATUS_MAP, PLACED_JOB_STATUSES, JOINED_JOB_STATUS, INACTIVE_JOB_STATUS,
+  PAYMENT_METHODS, PAYMENT_TYPES, QUALIFICATION_OPTIONS, COURSE_OPTIONS,
   todayISO, nowIso, round2, monthKey, isBlank, requireFields, isValidEmail, isValidMobile,
-  validateCourseValue, validateQualificationValue, validateJobStatusValue, validatePaymentMethod, validatePaymentType,
+  validateCourseValue, validateQualificationValue, normalizeJobStatus, validateJobStatusValue, validatePaymentMethod, validatePaymentType,
   toBool, parseYears, validateDocumentDates,
   buildDateCourseFilter, paginateAndSort, last6Months, monthlySeries, latestPerStudent, hashPassword
 };

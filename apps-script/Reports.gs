@@ -46,7 +46,7 @@ function action_reports(params) {
       'Course': s['Course'],
       'Mobile Number': s['Mobile Number'],
       'Gmail': s['Gmail'],
-      'Job Status': job['Job Status'] || 'Pending',
+      'Job Status': normalizeJobStatus_(job['Job Status'] || 'Enrolled'),
       'Organization': job['Organization'] || '',
       'Total Course Fee': pay.fee,
       'Payment Received': round2_(pay.received),
