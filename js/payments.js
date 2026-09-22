@@ -44,6 +44,7 @@ const Payments = (() => {
   }
 
   async function load() {
+    if (Auth.isHr()) return; // add-only role — the list itself is hidden and never fetched
     Utils.showLoading();
     try {
       const result = await Api.getPayments(state);
@@ -167,6 +168,10 @@ const Payments = (() => {
    * governs every later one — mirroring the same rule on the backend.
    */
   async function getStudentPaymentSummary(studentId) {
+    // hr has add-only access and cannot call getPayments at all; fall back to a
+    // blank summary and let the server (which can see the real data) be the
+    // final word on overpayment and inherited Payment Type when the payment is saved.
+    if (Auth.isHr()) return { totalPaid: 0, lastFee: 0, pendingBefore: 0, firstRow: null, inheritedType: '' };
     const { rows } = await Api.getPayments({ search: studentId, page: 1, pageSize: 100000 });
     const all = rows.filter(r => r['Student ID'] === studentId);
     const matches = all.filter(r => !editingRow || r._row !== editingRow._row);

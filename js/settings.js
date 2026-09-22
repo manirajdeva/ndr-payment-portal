@@ -2,12 +2,13 @@
  * settings.js
  * Settings section — User Management (admin only).
  *
- * Portal logins live in the backend `users` table and come in two roles:
+ * Portal logins live in the backend `users` table and come in three roles:
  *   admin    — full access, including adding/removing other users
- *   employee — can view every section and add new records, but can never
- *              edit or delete anything, and cannot manage users
- * ('hr' is an older name for the same create-only permission set and is
- * still accepted at login; the UI only offers admin / employee.)
+ *   employee — full add/edit/delete on Enquiries, Job Status & Documents,
+ *              but no Payments access and cannot manage users
+ *   hr       — full add/edit/delete on Enquiries & Job Status, but only
+ *              add access (no view/edit/delete) on Documents & Payments,
+ *              and cannot manage users
  *
  * Unlike the record tables this is a low-traffic screen, so it just
  * reloads the list after each change instead of doing optimistic UI.
@@ -19,14 +20,10 @@ const Settings = (() => {
 
   const ACCESS_TEXT = {
     admin: 'Add, edit, delete, manage users',
-    employee: 'Enquiries & Job Status: add/edit/delete · no Payments · no user management',
-    hr: 'Enquiries & Job Status: add/edit/delete · no Payments · no user management',
+    employee: 'Enquiries, Job Status & Documents: add/edit/delete · no Payments · no user management',
+    hr: 'Enquiries & Job Status: add/edit/delete · Documents & Payments: add only · no user management',
     viewer: 'View only'
   };
-
-  function roleLabel(role) {
-    return role === 'hr' ? 'employee' : role;
-  }
 
   async function load() {
     if (!Auth.isAdmin()) return; // the whole card is hidden for non-admins
@@ -55,7 +52,7 @@ const Settings = (() => {
       return `
       <tr>
         <td class="fw-semibold">${Utils.escapeHtml(u.username)}${isMe ? ' <span class="text-muted fw-normal">(you)</span>' : ''}</td>
-        <td>${Utils.escapeHtml(roleLabel(u.role))}</td>
+        <td>${Utils.escapeHtml(u.role)}</td>
         <td class="text-muted small">${Utils.escapeHtml(ACCESS_TEXT[u.role] || '—')}</td>
         <td class="text-muted small">${u.createdAt ? Utils.formatDate(u.createdAt) : '—'}</td>
         <td>
@@ -89,7 +86,7 @@ const Settings = (() => {
     document.getElementById('userIdHidden').value = user.id;
     document.getElementById('userUsername').value = user.username;
     document.getElementById('userUsername').readOnly = true; // renaming = a different login; add a new user instead
-    document.getElementById('userRole').value = user.role === 'hr' ? 'employee' : user.role;
+    document.getElementById('userRole').value = user.role;
     document.getElementById('userPasswordLabel').textContent = 'New password';
     document.getElementById('userPasswordHint').textContent = 'Leave blank to keep the current password. At least 6 characters otherwise.';
     resetPasswordVisibility();

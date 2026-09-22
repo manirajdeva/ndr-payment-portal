@@ -17,12 +17,16 @@ var SHEET_NAMES = {
 
 var SESSION_TTL_MS = 4 * 60 * 60 * 1000; // 4 hours
 
-// Non-admin roles with full add/edit/delete on Students and Job Status, but
-// no access to Payments and no user management. 'hr' is a legacy alias for
-// 'employee'.
+// Non-admin roles with full add/edit/delete on Students and Job Status.
 var EMPLOYEE_ROLES = ['employee', 'hr'];
+// Roles with full view/add/edit/delete on Documents. 'hr' is deliberately
+// excluded here — see ADD_ONLY_ROLES.
+var DOCUMENT_ROLES = ['employee'];
+// Roles allowed to add a Document or Payment without being able to view,
+// edit, or delete any existing records.
+var ADD_ONLY_ROLES = ['hr'];
 // Roles a user account may be assigned from Settings > User Management.
-var USER_ROLES = ['admin', 'employee'];
+var USER_ROLES = ['admin', 'employee', 'hr'];
 
 var COURSE_OPTIONS = [
   'Snowflake', 'Snowflake +DBT', 'Azure', 'Aws', 'Sap-Modules',

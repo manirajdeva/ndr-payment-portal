@@ -34,7 +34,7 @@ function action_getPayments(params) {
 }
 
 function action_savePayment(params) {
-  requireAdmin_(params);
+  requireRole_(params, ADD_ONLY_ROLES); // hr may add a payment but never view/edit/delete one
   var data = params.data || {};
   requireFields_(data, ['Student ID', 'Total Course Fee', 'Payment Received', 'Payment Method']);
   validatePaymentMethod_(data['Payment Method']);

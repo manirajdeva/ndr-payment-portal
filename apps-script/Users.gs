@@ -7,8 +7,9 @@
  *
  * Roles:
  *   admin    — full access, including managing users
- *   employee — view every section + add records, but never edit/delete
- * ('hr' may appear on older rows and behaves exactly like 'employee'.)
+ *   employee — full add/edit/delete on Students + Job Status; no Payments; no user management
+ *   hr       — full add/edit/delete on Students + Job Status; add-only (no view/edit/delete)
+ *              on Documents and Payments; no user management
  *
  * The primary login from the Config sheet (ADMIN_USERNAME) is not stored
  * in the Users sheet; it is listed here as a read-only "primary" row and
@@ -51,7 +52,7 @@ function action_addUser(params) {
   var role = String(data.role).trim();
   var password = String(data.password);
   if (username.length < 3) throw new AppError_('VALIDATION_ERROR', 'Username must be at least 3 characters.');
-  if (USER_ROLES.indexOf(role) === -1) throw new AppError_('VALIDATION_ERROR', 'Role must be "admin" or "employee".');
+  if (USER_ROLES.indexOf(role) === -1) throw new AppError_('VALIDATION_ERROR', 'Role must be "admin", "employee", or "hr".');
   if (password.length < 6) throw new AppError_('VALIDATION_ERROR', 'Password must be at least 6 characters.');
 
   var configSheet = getSheet_(SHEET_NAMES.CONFIG);
@@ -96,7 +97,7 @@ function action_updateUser(params) {
   var update = {};
   if (!isBlank_(data.role)) {
     var role = String(data.role).trim();
-    if (USER_ROLES.indexOf(role) === -1) throw new AppError_('VALIDATION_ERROR', 'Role must be "admin" or "employee".');
+    if (USER_ROLES.indexOf(role) === -1) throw new AppError_('VALIDATION_ERROR', 'Role must be "admin", "employee", or "hr".');
     update['Role'] = role;
   }
   if (!isBlank_(data.password)) {

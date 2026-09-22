@@ -29,7 +29,7 @@
       <a class="nav-link" data-section="enquiries"><i class="fa-solid fa-user-plus"></i> Student Enquiries</a>
       <a class="nav-link" data-section="jobs"><i class="fa-solid fa-briefcase"></i> Job Status</a>
       <a class="nav-link" data-section="documents"><i class="fa-solid fa-file-lines"></i> Documents</a>
-      <a class="nav-link admin-only" data-section="payments"><i class="fa-solid fa-indian-rupee-sign"></i> Payments</a>
+      <a class="nav-link pay-access" data-section="payments"><i class="fa-solid fa-indian-rupee-sign"></i> Payments</a>
       <a class="nav-link" data-section="reports"><i class="fa-solid fa-chart-column"></i> Reports</a>
       <a class="nav-link" data-section="settings"><i class="fa-solid fa-gear"></i> Settings</a>
     </nav>
@@ -180,21 +180,24 @@
 
       <!-- ===================== DOCUMENTS ===================== -->
       <section class="app-section" id="section-documents">
+        <div class="alert alert-info small hr-only d-none">
+          <i class="fa-solid fa-circle-info me-1"></i>Your role can add new documents but can't view, edit or delete existing records.
+        </div>
         <div class="card section-card">
           <div class="table-toolbar">
-            <div class="d-flex gap-2 flex-wrap">
+            <div class="d-flex gap-2 flex-wrap list-view-only">
               <input type="text" class="form-control" id="docSearch" placeholder="Search by student, organization, role or given by..." style="min-width:260px;">
               <input type="date" class="form-control" id="docDateFrom" title="Processed date from" style="max-width:150px;">
               <input type="date" class="form-control" id="docDateTo" title="Processed date to" style="max-width:150px;">
             </div>
             <div class="d-flex gap-2 flex-wrap">
-              <button class="btn btn-outline-primary btn-sm" id="docExportCsv"><i class="fa-solid fa-file-csv me-1"></i>CSV</button>
-              <button class="btn btn-outline-primary btn-sm" id="docExportExcel"><i class="fa-solid fa-file-excel me-1"></i>Excel</button>
-              <button class="btn btn-outline-primary btn-sm" id="docExportPdf"><i class="fa-solid fa-file-pdf me-1"></i>PDF</button>
+              <button class="btn btn-outline-primary btn-sm list-view-only" id="docExportCsv"><i class="fa-solid fa-file-csv me-1"></i>CSV</button>
+              <button class="btn btn-outline-primary btn-sm list-view-only" id="docExportExcel"><i class="fa-solid fa-file-excel me-1"></i>Excel</button>
+              <button class="btn btn-outline-primary btn-sm list-view-only" id="docExportPdf"><i class="fa-solid fa-file-pdf me-1"></i>PDF</button>
               <button class="btn btn-primary btn-sm creator-only" id="docAddBtn"><i class="fa-solid fa-plus me-1"></i>Add Document</button>
             </div>
           </div>
-          <div class="table-responsive-wrap">
+          <div class="table-responsive-wrap list-view-only">
             <table class="data-table" id="docTable">
               <thead>
                 <tr>
@@ -215,15 +218,18 @@
               <tbody id="docTableBody"></tbody>
             </table>
           </div>
-          <div class="pagination-bar" id="docPagination"></div>
+          <div class="pagination-bar list-view-only" id="docPagination"></div>
         </div>
       </section>
 
-      <!-- ===================== PAYMENTS (admin only) ===================== -->
-      <section class="app-section admin-only" id="section-payments">
+      <!-- ===================== PAYMENTS (admin: full access · hr: add-only) ===================== -->
+      <section class="app-section pay-access" id="section-payments">
+        <div class="alert alert-info small hr-only d-none">
+          <i class="fa-solid fa-circle-info me-1"></i>Your role can add new payments but can't view, edit or delete existing records.
+        </div>
         <div class="card section-card">
           <div class="table-toolbar">
-            <div class="d-flex gap-2 flex-wrap">
+            <div class="d-flex gap-2 flex-wrap list-view-only">
               <input type="text" class="form-control" id="paySearch" placeholder="Search by student, payment ID or method..." style="min-width:260px;">
               <select class="form-select" id="payCourseFilter" style="max-width:180px;"></select>
               <input type="date" class="form-control" id="payDateFrom" title="Payment date from" style="max-width:150px;">
@@ -234,13 +240,13 @@
               </div>
             </div>
             <div class="d-flex gap-2 flex-wrap">
-              <button class="btn btn-outline-primary btn-sm" id="payExportCsv"><i class="fa-solid fa-file-csv me-1"></i>CSV</button>
-              <button class="btn btn-outline-primary btn-sm" id="payExportExcel"><i class="fa-solid fa-file-excel me-1"></i>Excel</button>
-              <button class="btn btn-outline-primary btn-sm" id="payExportPdf"><i class="fa-solid fa-file-pdf me-1"></i>PDF</button>
-              <button class="btn btn-primary btn-sm admin-only" id="payAddBtn"><i class="fa-solid fa-plus me-1"></i>Add Payment</button>
+              <button class="btn btn-outline-primary btn-sm list-view-only" id="payExportCsv"><i class="fa-solid fa-file-csv me-1"></i>CSV</button>
+              <button class="btn btn-outline-primary btn-sm list-view-only" id="payExportExcel"><i class="fa-solid fa-file-excel me-1"></i>Excel</button>
+              <button class="btn btn-outline-primary btn-sm list-view-only" id="payExportPdf"><i class="fa-solid fa-file-pdf me-1"></i>PDF</button>
+              <button class="btn btn-primary btn-sm" id="payAddBtn"><i class="fa-solid fa-plus me-1"></i>Add Payment</button>
             </div>
           </div>
-          <div class="table-responsive-wrap">
+          <div class="table-responsive-wrap list-view-only">
             <table class="data-table" id="payTable">
               <thead>
                 <tr>
@@ -261,7 +267,7 @@
               <tbody id="payTableBody"></tbody>
             </table>
           </div>
-          <div class="pagination-bar" id="payPagination"></div>
+          <div class="pagination-bar list-view-only" id="payPagination"></div>
         </div>
       </section>
 
@@ -348,9 +354,11 @@
               </table>
               <div class="alert alert-info small mb-0">
                 <strong>Admins</strong> have full access, including Payments and managing user logins.
-                <strong>Employees</strong> can add, edit and delete Student Enquiries and Job Status
-                records and view the Dashboard and Reports, but have no access to the Payments
-                section and cannot manage users.
+                <strong>Employees</strong> can add, edit and delete Student Enquiries, Job Status and
+                Documents, but have no access to the Payments section and cannot manage users.
+                <strong>HR</strong> can add, edit and delete Student Enquiries and Job Status, but only
+                add new Documents and Payments (no viewing, editing or deleting existing records), and
+                cannot manage users.
               </div>
             </div>
           </div>
@@ -374,7 +382,7 @@
               <div class="table-toolbar">
                 <div>
                   <div class="section-title mb-0">User Management</div>
-                  <div class="text-muted small">admin = full access &nbsp;·&nbsp; employee = full Enquiries &amp; Job Status access, no Payments, no user management</div>
+                  <div class="text-muted small">admin = full access &nbsp;·&nbsp; employee = full Enquiries, Job Status &amp; Documents, no Payments, no user management &nbsp;·&nbsp; hr = full Enquiries &amp; Job Status, add-only Documents &amp; Payments, no user management</div>
                 </div>
                 <button class="btn btn-primary btn-sm" id="userAddBtn"><i class="fa-solid fa-user-plus me-1"></i>Add User</button>
               </div>
@@ -700,7 +708,8 @@
           <div class="mb-3">
             <label class="form-label">Role <span class="text-danger">*</span></label>
             <select class="form-select" id="userRole" required>
-              <option value="employee">Employee — view &amp; add only</option>
+              <option value="employee">Employee — full Enquiries &amp; Job Status, no Payments</option>
+              <option value="hr">HR — full Enquiries &amp; Job Status, add-only Documents &amp; Payments</option>
               <option value="admin">Admin — full access, manage users</option>
             </select>
           </div>

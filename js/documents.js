@@ -36,6 +36,7 @@ const Documents = (() => {
   ];
 
   async function load() {
+    if (Auth.isHr()) return; // add-only role — the list itself is hidden and never fetched
     Utils.showLoading();
     try {
       const result = await Api.getDocuments(state);
@@ -82,7 +83,7 @@ const Documents = (() => {
         <td>${Utils.formatDate(row['Processed Date'])}</td>
         <td>${Utils.escapeHtml(row['Given By'] || '-')}</td>
         <td>
-          ${row._pending ? Utils.pendingIndicatorHtml() : Auth.canCreate() ? `
+          ${row._pending ? Utils.pendingIndicatorHtml() : Auth.canManageDocuments() ? `
             <button class="btn-sm-icon edit" data-action="edit" data-row="${row._row}" title="Edit"><i class="fa-solid fa-pen"></i></button>
             <button class="btn-sm-icon delete" data-action="delete" data-row="${row._row}" title="Delete"><i class="fa-solid fa-trash"></i></button>
           ` : '<span class="text-muted">-</span>'}

@@ -71,10 +71,14 @@ async function requireRole(params, allowedRoles) {
   throw new AppError('FORBIDDEN', 'Your account does not have permission to make changes.');
 }
 
-/** Non-admin roles with full add/edit/delete on Students and Job Status (but no Payments access and no user management). 'hr' is a legacy alias for 'employee'. */
+/** Non-admin roles with full add/edit/delete on Students and Job Status. */
 const EMPLOYEE_ROLES = ['employee', 'hr'];
+/** Roles with full view/add/edit/delete on Documents. 'hr' is deliberately excluded — see ADD_ONLY_ROLES. */
+const DOCUMENT_ROLES = ['employee'];
+/** Roles allowed to add a Document or Payment without being able to view, edit, or delete any existing records. */
+const ADD_ONLY_ROLES = ['hr'];
 /** Roles a user account may be assigned in the UI. */
-const USER_ROLES = ['admin', 'employee'];
+const USER_ROLES = ['admin', 'employee', 'hr'];
 
 /** The { username, role } recorded as the actor on every audit-log row. */
 function actorOf(session) {
@@ -235,7 +239,7 @@ async function action_deleteJobStatus(params) {
 /* ---------------- Documents (Module 4) ---------------- */
 
 async function action_getDocuments(params) {
-  await requireSession(params);
+  await requireRole(params, DOCUMENT_ROLES); // hr has add-only access — no view
   const rows = await store.loadDocuments();
   return paginateAndSort(rows, {
     search: params.search, searchFields: ['Student ID', 'Student Name', 'Organization Name', 'Employee Role', 'Given By'],
@@ -270,7 +274,7 @@ async function action_saveDocument(params) {
 }
 
 async function action_updateDocument(params) {
-  const session = await requireRole(params, EMPLOYEE_ROLES);
+  const session = await requireRole(params, DOCUMENT_ROLES);
   const data = params.data || {};
   requireFields(data, ['_row', 'Organization Name']);
   const years = parseYears(data['No of Years']);
@@ -289,7 +293,7 @@ async function action_updateDocument(params) {
 }
 
 async function action_deleteDocument(params) {
-  const session = await requireRole(params, EMPLOYEE_ROLES);
+  const session = await requireRole(params, DOCUMENT_ROLES);
   const rowId = Number(params.data && params.data['_row']);
   const affected = await store.deleteDocumentRow(rowId, actorOf(session));
   if (!affected) throw new AppError('NOT_FOUND', 'Document record not found.');
@@ -323,7 +327,7 @@ async function action_getPayments(params) {
 }
 
 async function action_savePayment(params) {
-  const session = await requireAdmin(params);
+  const session = await requireRole(params, ADD_ONLY_ROLES); // hr may add a payment but never view/edit/delete one
   const data = params.data || {};
   requireFields(data, ['Student ID', 'Total Course Fee', 'Payment Received', 'Payment Method']);
   validatePaymentMethod(data['Payment Method']);
@@ -549,7 +553,7 @@ async function action_addUser(params) {
   const role = String(data.role).trim();
   const password = String(data.password);
   if (username.length < 3) throw new AppError('VALIDATION_ERROR', 'Username must be at least 3 characters.');
-  if (!USER_ROLES.includes(role)) throw new AppError('VALIDATION_ERROR', 'Role must be "admin" or "employee".');
+  if (!USER_ROLES.includes(role)) throw new AppError('VALIDATION_ERROR', 'Role must be "admin", "employee", or "hr".');
   if (password.length < 6) throw new AppError('VALIDATION_ERROR', 'Password must be at least 6 characters.');
 
   if (await store.findUserByUsername(username)) throw new AppError('DUPLICATE_USER', 'A user with this username already exists.');
@@ -575,7 +579,7 @@ async function action_updateUser(params) {
   const fields = {};
   if (!isBlank(data.role)) {
     const role = String(data.role).trim();
-    if (!USER_ROLES.includes(role)) throw new AppError('VALIDATION_ERROR', 'Role must be "admin" or "employee".');
+    if (!USER_ROLES.includes(role)) throw new AppError('VALIDATION_ERROR', 'Role must be "admin", "employee", or "hr".');
     if (user.role === 'admin' && role !== 'admin' && (await store.countOtherAdmins(id)) === 0) {
       throw new AppError('LAST_ADMIN', 'At least one admin account must remain.');
     }

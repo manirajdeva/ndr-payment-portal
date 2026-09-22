@@ -12,7 +12,7 @@
  */
 
 function action_getDocuments(params) {
-  requireSession_(params);
+  requireRole_(params, DOCUMENT_ROLES); // hr has add-only access — no view
   var sheet = getSheet_(SHEET_NAMES.DOCUMENTS);
   var rows = readAllRows_(sheet).map(normalizeDocumentRow_);
   return paginateAndSort_(rows, {
@@ -67,7 +67,7 @@ function action_saveDocument(params) {
 }
 
 function action_updateDocument(params) {
-  requireRole_(params, EMPLOYEE_ROLES);
+  requireRole_(params, DOCUMENT_ROLES);
   var data = params.data || {};
   requireFields_(data, ['_row', 'Organization Name']);
   var years = parseYears_(data['No of Years']);
@@ -101,7 +101,7 @@ function action_updateDocument(params) {
 }
 
 function action_deleteDocument(params) {
-  requireRole_(params, EMPLOYEE_ROLES);
+  requireRole_(params, DOCUMENT_ROLES);
   var rowIndex = Number(params.data && params.data['_row']);
   if (!rowIndex) throw new AppError_('VALIDATION_ERROR', 'Record identifier is required.');
   var lock = LockService.getScriptLock();

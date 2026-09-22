@@ -97,7 +97,8 @@ const App = (() => {
     const role = Auth.getRole();
     document.getElementById('settingsRole').textContent =
       role === 'admin' ? 'Admin (full access · manage users)' :
-      (role === 'employee' || role === 'hr') ? 'Employee (add/edit/delete Enquiries & Job Status; no Payments; no user management)' :
+      role === 'employee' ? 'Employee (add/edit/delete Enquiries, Job Status & Documents; no Payments; no user management)' :
+      role === 'hr' ? 'HR (add/edit/delete Enquiries & Job Status; add-only Documents & Payments; no user management)' :
       'Viewer (read-only)';
 
     if (!Auth.isAdmin()) {
@@ -105,6 +106,13 @@ const App = (() => {
     }
     if (!Auth.canCreate()) {
       document.querySelectorAll('.creator-only').forEach(el => el.classList.add('d-none'));
+    }
+    if (!Auth.canAccessPayments()) {
+      document.querySelectorAll('.pay-access').forEach(el => el.classList.add('d-none'));
+    }
+    if (Auth.isHr()) {
+      document.querySelectorAll('.list-view-only').forEach(el => el.classList.add('d-none'));
+      document.querySelectorAll('.hr-only').forEach(el => el.classList.remove('d-none'));
     }
 
     const session = Auth.getSession();

@@ -23,12 +23,16 @@ const SESSION_TTL_MS = 4 * 60 * 60 * 1000;
 const ADMIN_USERNAME = 'admin';
 const ADMIN_PASSWORD = 'Admin@123';
 
-// Non-admin roles with full add/edit/delete on Students and Job Status, but
-// no Payments access and no user management. 'hr' is a legacy alias for
-// 'employee'.
+// Non-admin roles with full add/edit/delete on Students and Job Status.
 const EMPLOYEE_ROLES = ['employee', 'hr'];
+// Roles with full view/add/edit/delete on Documents. 'hr' is deliberately
+// excluded here — see ADD_ONLY_ROLES.
+const DOCUMENT_ROLES = ['employee'];
+// Roles allowed to add a Document or Payment without being able to view,
+// edit, or delete any existing records.
+const ADD_ONLY_ROLES = ['hr'];
 // Roles a user account may be assigned from Settings > User Management.
-const USER_ROLES = ['admin', 'employee'];
+const USER_ROLES = ['admin', 'employee', 'hr'];
 
 const JOB_STATUS_OPTIONS = [
   'Enrolled', 'Training', 'Scheduling Interview', 'Interview Cleared',
@@ -298,7 +302,7 @@ function action_addUser(params) {
   const role = String(data.role).trim();
   const password = String(data.password);
   if (username.length < 3) throw new AppError('VALIDATION_ERROR', 'Username must be at least 3 characters.');
-  if (!USER_ROLES.includes(role)) throw new AppError('VALIDATION_ERROR', 'Role must be "admin" or "employee".');
+  if (!USER_ROLES.includes(role)) throw new AppError('VALIDATION_ERROR', 'Role must be "admin", "employee", or "hr".');
   if (password.length < 6) throw new AppError('VALIDATION_ERROR', 'Password must be at least 6 characters.');
   if (users.some(u => u.username.toLowerCase() === username.toLowerCase())) {
     throw new AppError('DUPLICATE_USER', 'A user with this username already exists.');
@@ -318,7 +322,7 @@ function action_updateUser(params) {
   const changes = {};
   if (!isBlank(data.role)) {
     const role = String(data.role).trim();
-    if (!USER_ROLES.includes(role)) throw new AppError('VALIDATION_ERROR', 'Role must be "admin" or "employee".');
+    if (!USER_ROLES.includes(role)) throw new AppError('VALIDATION_ERROR', 'Role must be "admin", "employee", or "hr".');
     if (user.role === 'admin' && role !== 'admin' && users.filter(u => u.role === 'admin' && u.id !== user.id).length === 0) {
       throw new AppError('LAST_ADMIN', 'At least one admin account must remain.');
     }
@@ -558,7 +562,7 @@ function action_deleteJobStatus(params) {
 /* ---------------- Documents (Module 4) ---------------- */
 
 function action_getDocuments(params) {
-  requireSession(params);
+  requireRole(params, DOCUMENT_ROLES); // hr has add-only access — no view
   return paginateAndSort(db.documents, {
     search: params.search, searchFields: ['Student ID', 'Student Name', 'Organization Name', 'Employee Role', 'Given By'],
     filterFn: buildDateCourseFilter(params, 'Processed Date'),
@@ -593,7 +597,7 @@ function action_saveDocument(params) {
 }
 
 function action_updateDocument(params) {
-  const session = requireRole(params, EMPLOYEE_ROLES);
+  const session = requireRole(params, DOCUMENT_ROLES);
   const data = params.data || {};
   requireFields(data, ['_row', 'Organization Name']);
   const years = parseYears(data['No of Years']);
@@ -617,7 +621,7 @@ function action_updateDocument(params) {
 }
 
 function action_deleteDocument(params) {
-  const session = requireRole(params, EMPLOYEE_ROLES);
+  const session = requireRole(params, DOCUMENT_ROLES);
   const rowIndex = Number(params.data && params.data['_row']);
   const idx = db.documents.findIndex(d => d._row === rowIndex);
   if (idx === -1) throw new AppError('NOT_FOUND', 'Document record not found.');
@@ -690,7 +694,7 @@ function action_getPayments(params) {
 }
 
 function action_savePayment(params) {
-  const session = requireAdmin(params);
+  const session = requireRole(params, ADD_ONLY_ROLES); // hr may add a payment but never view/edit/delete one
   const data = params.data || {};
   requireFields(data, ['Student ID', 'Total Course Fee', 'Payment Received', 'Payment Method']);
   validatePaymentMethod(data['Payment Method']);

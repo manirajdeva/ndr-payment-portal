@@ -83,14 +83,21 @@ comment — this is remembered on the device until you switch back with
 The `users` table holds every portal login. `role` is one of:
 
 - **admin** — full access, including Payments and adding/removing other users
-- **employee** — full add / edit / delete on Student Enquiries and Job
-  Status, plus the Dashboard and Reports. **No access to the Payments
+- **employee** — full add / edit / delete on Student Enquiries, Job Status
+  and Documents, plus the Dashboard and Reports. **No access to the Payments
   section** (the API rejects every `*Payment*` action for this role) and
-  cannot manage users. (`hr` on older rows is a synonym for `employee`.)
+  cannot manage users.
+- **hr** — full add / edit / delete on Student Enquiries and Job Status,
+  plus the Dashboard and Reports, but only **add** access on Documents and
+  Payments — the API rejects `getDocuments`/`updateDocument`/`deleteDocument`
+  and `getPayments`/`updatePayment`/`deletePayment` for this role, so hr
+  logins can never view, edit or delete an existing Document or Payment
+  record. Cannot manage users.
 
 `npm run setup` seeds the bootstrap **admin** (and an optional starter
 **employee** if `EMPLOYEE_USERNAME` / `EMPLOYEE_PASSWORD`, or the older
-`HR_USERNAME` / `HR_PASSWORD`, are set). After that, add and manage users
+`HR_USERNAME` / `HR_PASSWORD`, are set — this always seeds the `employee`
+role, not `hr`). After that, add and manage users
 from the app: **Settings → User Management** (admins only), which also
 resets any user's password.
 

@@ -87,9 +87,10 @@ function requireAdmin_(params) {
 
 /**
  * Like requireAdmin_, but also allows the given extra role(s) through —
- * used for create-only actions (e.g. addStudent, saveJobStatus) that some
- * non-admin roles (like 'hr') are permitted to perform, while still being
- * blocked from editing/deleting anything.
+ * used both for create-only actions (e.g. addStudent, saveJobStatus, the
+ * hr-only savePayment) and for view/edit/delete actions restricted to a
+ * subset of non-admin roles (e.g. Documents, which 'hr' can add to but not
+ * view, edit, or delete — see DOCUMENT_ROLES / ADD_ONLY_ROLES in Utils.gs).
  */
 function requireRole_(params, allowedRoles) {
   var session = requireSession_(params);

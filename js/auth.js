@@ -44,13 +44,28 @@ const Auth = (() => {
 
   /**
    * True for roles allowed to add / edit / delete Student Enquiries and Job
-   * Status: 'admin' and 'employee'. Employees still have no Payments access
-   * and no user management — those stay admin-only (Auth.isAdmin()). 'hr' is
-   * a legacy alias for 'employee' so older logins keep working.
+   * Status, and to add (though not necessarily view/edit/delete) Documents:
+   * 'admin', 'employee' and 'hr'. User management stays admin-only
+   * (Auth.isAdmin()).
    */
   function canCreate() {
     const role = getRole();
     return role === 'admin' || role === 'employee' || role === 'hr';
+  }
+
+  function isHr() {
+    return getRole() === 'hr';
+  }
+
+  /** True for roles that can view/edit/delete existing Documents, not just add new ones. */
+  function canManageDocuments() {
+    const role = getRole();
+    return role === 'admin' || role === 'employee';
+  }
+
+  /** True for roles that can reach the Payments section at all — 'admin' (full access) and 'hr' (add-only). */
+  function canAccessPayments() {
+    return isAdmin() || isHr();
   }
 
   function clearSession() {
@@ -85,5 +100,8 @@ const Auth = (() => {
     location.href = 'login.html';
   }
 
-  return { saveSession, getSession, getToken, getUsername, getRole, isAdmin, canCreate, clearSession, isLoggedIn, guardPage, watchSessionExpiry, logout };
+  return {
+    saveSession, getSession, getToken, getUsername, getRole, isAdmin, canCreate, isHr,
+    canManageDocuments, canAccessPayments, clearSession, isLoggedIn, guardPage, watchSessionExpiry, logout
+  };
 })();
