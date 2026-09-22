@@ -33,9 +33,15 @@ var COURSE_OPTIONS = [
   'Bussiness Analyst', 'GenarativeAI', 'Python'
 ];
 
+// COURSE_OPTIONS is just the dropdown's shortcut list — any other non-blank,
+// reasonably-sized course name is also accepted (typed manually in the UI).
 function validateCourseValue_(course) {
-  if (COURSE_OPTIONS.indexOf(course) === -1) {
-    throw new AppError_('VALIDATION_ERROR', 'Invalid course value.');
+  var value = isBlank_(course) ? '' : String(course).trim();
+  if (!value) {
+    throw new AppError_('VALIDATION_ERROR', 'Course is required.');
+  }
+  if (value.length > 100) {
+    throw new AppError_('VALIDATION_ERROR', 'Course name is too long (max 100 characters).');
   }
 }
 

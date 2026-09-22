@@ -16,6 +16,41 @@ const Enquiries = (() => {
   let meta = { total: 0, page: 1, pageSize: 10, totalPages: 1 };
   let loaded = false;
 
+  // Lets a course not in the preset dropdown be typed in manually — the
+  // backend accepts any non-blank course string, the dropdown is just a
+  // shortcut for the common ones.
+  const CUSTOM_COURSE_VALUE = '__custom__';
+
+  function toggleCourseCustomInput() {
+    const select = document.getElementById('enqCourse');
+    const custom = document.getElementById('enqCourseCustom');
+    const isCustom = select.value === CUSTOM_COURSE_VALUE;
+    custom.classList.toggle('d-none', !isCustom);
+    custom.required = isCustom;
+    if (!isCustom) custom.value = '';
+  }
+
+  /** Selects the course in the dropdown if it's a known option, otherwise falls back to the manual-entry input. */
+  function setCourseValue(course) {
+    const select = document.getElementById('enqCourse');
+    const custom = document.getElementById('enqCourseCustom');
+    if (Utils.COURSE_OPTIONS.includes(course)) {
+      select.value = course;
+      toggleCourseCustomInput();
+    } else {
+      select.value = CUSTOM_COURSE_VALUE;
+      toggleCourseCustomInput();
+      custom.value = course || '';
+    }
+  }
+
+  function getCourseValue() {
+    const select = document.getElementById('enqCourse');
+    return select.value === CUSTOM_COURSE_VALUE
+      ? document.getElementById('enqCourseCustom').value.trim()
+      : select.value.trim();
+  }
+
   const exportColumns = [
     { key: 'Student ID', label: 'Student ID' },
     { key: 'Student Name', label: 'Student Name' },
@@ -85,6 +120,7 @@ const Enquiries = (() => {
     document.getElementById('enqStudentIdHidden').value = '';
     document.getElementById('enqStudentIdDisplay').value = 'Auto-generated on save';
     document.getElementById('enqDate').value = Utils.todayISO();
+    toggleCourseCustomInput();
     new bootstrap.Modal('#enqModal').show();
   }
 
@@ -101,7 +137,7 @@ const Enquiries = (() => {
     document.getElementById('enqStudentIdDisplay').value = row['Student ID'] || 'Auto-generated on save';
     document.getElementById('enqDate').value = row['Enquiry Date'];
     document.getElementById('enqName').value = row['Student Name'];
-    document.getElementById('enqCourse').value = row['Course'];
+    setCourseValue(row['Course']);
     document.getElementById('enqQualification').value = row['Qualification'] || '';
     document.getElementById('enqMobile').value = row['Mobile Number'];
     document.getElementById('enqEmail').value = row['Gmail'];
@@ -112,7 +148,7 @@ const Enquiries = (() => {
     return {
       'Student Name': document.getElementById('enqName').value.trim(),
       'Enquiry Date': document.getElementById('enqDate').value,
-      'Course': document.getElementById('enqCourse').value.trim(),
+      'Course': getCourseValue(),
       'Qualification': document.getElementById('enqQualification').value,
       'Referred By': document.getElementById('enqReferredBy').value.trim(),
       'Gmail': document.getElementById('enqEmail').value.trim(),
@@ -265,6 +301,8 @@ const Enquiries = (() => {
 
   function wireEvents() {
     Utils.populateCourseSelect('enqCourse');
+    document.getElementById('enqCourse').insertAdjacentHTML('beforeend', `<option value="${CUSTOM_COURSE_VALUE}">Other (type manually)</option>`);
+    document.getElementById('enqCourse').addEventListener('change', toggleCourseCustomInput);
     document.getElementById('enqAddBtn').addEventListener('click', openAddModal);
     document.getElementById('enqForm').addEventListener('submit', handleSubmit);
 

@@ -61,8 +61,11 @@ function requireFields(data, fields) {
 function isValidEmail(email) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email).trim()); }
 function isValidMobile(mobile) { return /^[6-9]\d{9}$/.test(String(mobile).trim()); }
 
+/** COURSE_OPTIONS is just the dropdown's shortcut list — any other non-blank, reasonably-sized course name is also accepted (typed manually in the UI). */
 function validateCourseValue(course) {
-  if (!COURSE_OPTIONS.includes(course)) throw new AppError('VALIDATION_ERROR', 'Invalid course value.');
+  const value = isBlank(course) ? '' : String(course).trim();
+  if (!value) throw new AppError('VALIDATION_ERROR', 'Course is required.');
+  if (value.length > 100) throw new AppError('VALIDATION_ERROR', 'Course name is too long (max 100 characters).');
 }
 function validateQualificationValue(qualification) {
   if (!isBlank(qualification) && !QUALIFICATION_OPTIONS.includes(qualification)) {

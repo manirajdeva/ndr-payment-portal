@@ -375,10 +375,11 @@ function validateQualificationValue(qualification) {
   }
 }
 
+/** COURSE_OPTIONS is just the dropdown's shortcut list — any other non-blank, reasonably-sized course name is also accepted (typed manually in the UI). */
 function validateCourseValue(course) {
-  if (!COURSE_OPTIONS.includes(course)) {
-    throw new AppError('VALIDATION_ERROR', 'Invalid course value.');
-  }
+  const value = isBlank(course) ? '' : String(course).trim();
+  if (!value) throw new AppError('VALIDATION_ERROR', 'Course is required.');
+  if (value.length > 100) throw new AppError('VALIDATION_ERROR', 'Course name is too long (max 100 characters).');
 }
 
 function assertNoDuplicateStudent(data, excludeStudentId) {
