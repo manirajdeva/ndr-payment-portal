@@ -18,11 +18,12 @@
 
 -- Portal logins. `role` is one of:
 --   'admin'    — full access, incl. Payments and managing users
---   'employee' — full add/edit/delete on students + jobs + documents,
---                but no Payments access and no user management
+--   'employee' — full add/edit/delete on students + jobs + documents +
+--                payments, but no user management
 --   'hr'       — full add/edit/delete on students + jobs, add-only
 --                (no view/edit/delete) on documents + payments, no
 --                user management
+-- `status` is 'active' (may log in) or 'inactive' (login refused, sessions ended).
 -- Rows are seeded by npm run setup and managed at runtime from the app
 -- (Settings > User Management, admin only).
 CREATE TABLE IF NOT EXISTS users (
@@ -31,6 +32,7 @@ CREATE TABLE IF NOT EXISTS users (
   salt          VARCHAR(64) NOT NULL,
   password_hash CHAR(64) NOT NULL,
   role          VARCHAR(20) NOT NULL,
+  status        VARCHAR(10) NOT NULL DEFAULT 'active',
   created_at    VARCHAR(40) NOT NULL,
   UNIQUE KEY uq_users_username (username)
 );

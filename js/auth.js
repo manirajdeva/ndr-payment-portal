@@ -63,9 +63,16 @@ const Auth = (() => {
     return role === 'admin' || role === 'employee';
   }
 
-  /** True for roles that can reach the Payments section at all — 'admin' (full access) and 'hr' (add-only). */
+  /** True for roles that can reach the Payments section at all — 'admin' and 'employee' (full access) and 'hr' (add-only). */
   function canAccessPayments() {
-    return isAdmin() || isHr();
+    const role = getRole();
+    return role === 'admin' || role === 'employee' || role === 'hr';
+  }
+
+  /** True for roles that can view/edit/delete existing Payments, not just add new ones. */
+  function canManagePayments() {
+    const role = getRole();
+    return role === 'admin' || role === 'employee';
   }
 
   function clearSession() {
@@ -102,6 +109,6 @@ const Auth = (() => {
 
   return {
     saveSession, getSession, getToken, getUsername, getRole, isAdmin, canCreate, isHr,
-    canManageDocuments, canAccessPayments, clearSession, isLoggedIn, guardPage, watchSessionExpiry, logout
+    canManageDocuments, canAccessPayments, canManagePayments, clearSession, isLoggedIn, guardPage, watchSessionExpiry, logout
   };
 })();

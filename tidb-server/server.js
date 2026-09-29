@@ -37,6 +37,9 @@ async function action_login(params) {
   if (!user || hashPassword(password, user.salt) !== user.password_hash) {
     throw new AppError('INVALID_CREDENTIALS', 'Invalid username or password.');
   }
+  if (user.status === 'inactive') {
+    throw new AppError('ACCOUNT_INACTIVE', 'Your account is inactive. Please contact an admin.');
+  }
 
   const token = crypto.randomUUID();
   const expiresAt = Date.now() + SESSION_TTL_MS;
@@ -75,8 +78,14 @@ async function requireRole(params, allowedRoles) {
 const EMPLOYEE_ROLES = ['employee', 'hr'];
 /** Roles with full view/add/edit/delete on Documents. 'hr' is deliberately excluded — see ADD_ONLY_ROLES. */
 const DOCUMENT_ROLES = ['employee'];
-/** Roles allowed to add a Document or Payment without being able to view, edit, or delete any existing records. */
+/** Roles with full view/add/edit/delete on Payments ('hr' is add-only). */
+const PAYMENT_ROLES = ['employee'];
+/** Roles allowed to add a Document without being able to view, edit, or delete existing records. */
 const ADD_ONLY_ROLES = ['hr'];
+/** Roles that may add a Payment (hr is add-only; employee has full access). */
+const PAYMENT_ADD_ROLES = ['hr', 'employee'];
+/** Account states. 'inactive' users cannot log in and their sessions are ended. */
+const USER_STATUSES = ['active', 'inactive'];
 /** Roles a user account may be assigned in the UI. */
 const USER_ROLES = ['admin', 'employee', 'hr'];
 
@@ -316,7 +325,7 @@ function resolvePaymentType(inheritedType, requestedType) {
 }
 
 async function action_getPayments(params) {
-  await requireAdmin(params); // Payments is an admin-only section — employees have no access at all
+  await requireRole(params, PAYMENT_ROLES); // hr has add-only access — no view
   let rows = await store.loadPayments();
   if (params.latestOnly) rows = Object.values(latestPerStudent(rows));
   return paginateAndSort(rows, {
@@ -327,7 +336,7 @@ async function action_getPayments(params) {
 }
 
 async function action_savePayment(params) {
-  const session = await requireRole(params, ADD_ONLY_ROLES); // hr may add a payment but never view/edit/delete one
+  const session = await requireRole(params, PAYMENT_ADD_ROLES); // hr may add a payment but never view/edit/delete one
   const data = params.data || {};
   requireFields(data, ['Student ID', 'Total Course Fee', 'Payment Received', 'Payment Method']);
   validatePaymentMethod(data['Payment Method']);
@@ -363,7 +372,7 @@ async function action_savePayment(params) {
 }
 
 async function action_updatePayment(params) {
-  const session = await requireAdmin(params);
+  const session = await requireRole(params, PAYMENT_ROLES);
   const data = params.data || {};
   requireFields(data, ['_row', 'Total Course Fee', 'Payment Received', 'Payment Method']);
   validatePaymentMethod(data['Payment Method']);
@@ -403,7 +412,7 @@ async function action_updatePayment(params) {
 }
 
 async function action_deletePayment(params) {
-  const session = await requireAdmin(params);
+  const session = await requireRole(params, PAYMENT_ROLES);
   const rowId = Number(params.data && params.data['_row']);
   const affected = await store.deletePaymentRow(rowId, actorOf(session));
   if (!affected) throw new AppError('NOT_FOUND', 'Payment record not found.');
@@ -552,6 +561,8 @@ async function action_addUser(params) {
   const username = String(data.username).trim();
   const role = String(data.role).trim();
   const password = String(data.password);
+  const status = isBlank(data.status) ? 'active' : String(data.status).trim();
+  if (!USER_STATUSES.includes(status)) throw new AppError('VALIDATION_ERROR', 'Status must be "active" or "inactive".');
   if (username.length < 3) throw new AppError('VALIDATION_ERROR', 'Username must be at least 3 characters.');
   if (!USER_ROLES.includes(role)) throw new AppError('VALIDATION_ERROR', 'Role must be "admin", "employee", or "hr".');
   if (password.length < 6) throw new AppError('VALIDATION_ERROR', 'Password must be at least 6 characters.');
@@ -561,7 +572,7 @@ async function action_addUser(params) {
   const salt = crypto.randomUUID();
   const passwordHash = hashPassword(password, salt);
   try {
-    return await store.insertUser({ username, salt, passwordHash, role, createdAt: nowIso() });
+    return await store.insertUser({ username, salt, passwordHash, role, status, createdAt: nowIso() });
   } catch (err) {
     if (err && err.code === 'ER_DUP_ENTRY') throw new AppError('DUPLICATE_USER', 'A user with this username already exists.');
     throw err;
@@ -569,9 +580,13 @@ async function action_addUser(params) {
 }
 
 async function action_updateUser(params) {
-  await requireAdmin(params);
+  const session = await requireAdmin(params);
   const data = params.data || {};
   requireFields(data, ['id']);
+  // Nobody — not even an admin — sets another user's password; each user changes their own via changePassword.
+  if (!isBlank(data.password)) {
+    throw new AppError('FORBIDDEN', 'Passwords can only be changed by the account owner (Settings > Change Password).');
+  }
   const id = Number(data.id);
   const user = await store.findUserById(id);
   if (!user) throw new AppError('NOT_FOUND', 'User not found.');
@@ -585,16 +600,42 @@ async function action_updateUser(params) {
     }
     fields.role = role;
   }
-  if (!isBlank(data.password)) {
-    const password = String(data.password);
-    if (password.length < 6) throw new AppError('VALIDATION_ERROR', 'Password must be at least 6 characters.');
-    fields.salt = crypto.randomUUID();
-    fields.passwordHash = hashPassword(password, fields.salt);
+  if (!isBlank(data.status)) {
+    const status = String(data.status).trim();
+    if (!USER_STATUSES.includes(status)) throw new AppError('VALIDATION_ERROR', 'Status must be "active" or "inactive".');
+    if (status === 'inactive' && user.username === session.username) {
+      throw new AppError('SELF_DEACTIVATE', 'You cannot deactivate your own account.');
+    }
+    if (status === 'inactive' && user.role === 'admin' && (await store.countOtherAdmins(id)) === 0) {
+      throw new AppError('LAST_ADMIN', 'At least one active admin account must remain.');
+    }
+    fields.status = status;
   }
-  if (!Object.keys(fields).length) throw new AppError('VALIDATION_ERROR', 'Nothing to update — change the role or set a new password.');
+  if (!Object.keys(fields).length) throw new AppError('VALIDATION_ERROR', 'Nothing to update — change the role or the status.');
 
   await store.updateUserRow(id, fields);
-  return { id, username: user.username, role: fields.role || user.role };
+  // Deactivation takes effect immediately: end any session the user already has open.
+  if (fields.status === 'inactive') await store.deleteSessionsForUser(user.username);
+  return { id, username: user.username, role: fields.role || user.role, status: fields.status || user.status };
+}
+
+/** Any logged-in user changes their OWN password; the current password must be supplied. */
+async function action_changePassword(params) {
+  const session = await requireSession(params);
+  const data = params.data || {};
+  requireFields(data, ['currentPassword', 'newPassword']);
+  const newPassword = String(data.newPassword);
+  if (newPassword.length < 6) throw new AppError('VALIDATION_ERROR', 'New password must be at least 6 characters.');
+
+  const user = await store.findUserByUsername(session.username);
+  if (!user) throw new AppError('NOT_FOUND', 'User not found.');
+  if (hashPassword(String(data.currentPassword), user.salt) !== user.password_hash) {
+    throw new AppError('INVALID_CREDENTIALS', 'Current password is incorrect.');
+  }
+  const salt = crypto.randomUUID();
+  await store.updateUserRow(user.id, { salt, passwordHash: hashPassword(newPassword, salt) });
+  await store.deleteSessionsForUser(user.username, params.token); // sign out every other device
+  return { changed: true };
 }
 
 async function action_deleteUser(params) {
@@ -630,7 +671,7 @@ const ACTIONS = {
   getDocuments: action_getDocuments, saveDocument: action_saveDocument, updateDocument: action_updateDocument, deleteDocument: action_deleteDocument,
   getPayments: action_getPayments, savePayment: action_savePayment, updatePayment: action_updatePayment, deletePayment: action_deletePayment,
   dashboardStats: action_dashboardStats, reports: action_reports,
-  listUsers: action_listUsers, addUser: action_addUser, updateUser: action_updateUser, deleteUser: action_deleteUser,
+  listUsers: action_listUsers, addUser: action_addUser, updateUser: action_updateUser, changePassword: action_changePassword, deleteUser: action_deleteUser,
   getAuditLog: action_getAuditLog
 };
 

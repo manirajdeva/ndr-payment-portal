@@ -89,7 +89,7 @@ const Payments = (() => {
         <td>${Utils.escapeHtml(row['Payment Type'] || '-')}</td>
         <td>${Utils.formatDate(row['Payment Date'])}</td>
         <td>
-          ${row._pending ? Utils.pendingIndicatorHtml() : Auth.isAdmin() ? `
+          ${row._pending ? Utils.pendingIndicatorHtml() : Auth.canManagePayments() ? `
             <button class="btn-sm-icon edit" data-action="edit" data-row="${row._row}" title="Edit"><i class="fa-solid fa-pen"></i></button>
             <button class="btn-sm-icon delete" data-action="delete" data-row="${row._row}" title="Delete"><i class="fa-solid fa-trash"></i></button>
           ` : '<span class="text-muted">-</span>'}

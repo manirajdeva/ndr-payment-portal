@@ -127,6 +127,7 @@ const Api = (() => {
     listUsers: () => call('listUsers'),
     addUser: (data) => call('addUser', { data }),
     updateUser: (data) => call('updateUser', { data }),
+    changePassword: (data) => call('changePassword', { data }),
     deleteUser: (id) => call('deleteUser', { data: { id } }),
 
     getAuditLog: (opts) => call('getAuditLog', opts)

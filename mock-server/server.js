@@ -28,6 +28,12 @@ const EMPLOYEE_ROLES = ['employee', 'hr'];
 // Roles with full view/add/edit/delete on Documents. 'hr' is deliberately
 // excluded here — see ADD_ONLY_ROLES.
 const DOCUMENT_ROLES = ['employee'];
+// Roles with full view/add/edit/delete on Payments ('hr' is add-only).
+const PAYMENT_ROLES = ['employee'];
+// Roles that may add a Payment.
+const PAYMENT_ADD_ROLES = ['hr', 'employee'];
+// Account states — 'inactive' users cannot log in and their sessions are ended.
+const USER_STATUSES = ['active', 'inactive'];
 // Roles allowed to add a Document or Payment without being able to view,
 // edit, or delete any existing records.
 const ADD_ONLY_ROLES = ['hr'];
@@ -216,8 +222,8 @@ function latestPerStudent(jobRows) {
 // Users added via action_addUser live only for the life of this process.
 let nextUserId = 1;
 const users = [
-  { id: nextUserId++, username: ADMIN_USERNAME, password: ADMIN_PASSWORD, role: 'admin', createdAt: nowIso() },
-  { id: nextUserId++, username: 'hrndr@admin', password: 'Hr@2026@', role: 'employee', createdAt: nowIso() }
+  { id: nextUserId++, username: ADMIN_USERNAME, password: ADMIN_PASSWORD, role: 'admin', status: 'active', createdAt: nowIso() },
+  { id: nextUserId++, username: 'hrndr@admin', password: 'Hr@2026@', role: 'employee', status: 'active', createdAt: nowIso() }
 ];
 
 function action_login(params) {
@@ -227,6 +233,7 @@ function action_login(params) {
 
   const user = users.find(u => u.username === username && u.password === password);
   if (!user) throw new AppError('INVALID_CREDENTIALS', 'Invalid username or password.');
+  if (user.status === 'inactive') throw new AppError('ACCOUNT_INACTIVE', 'Your account is inactive. Please contact an admin.');
 
   const token = crypto.randomUUID();
   const expiresAt = Date.now() + SESSION_TTL_MS;
@@ -291,7 +298,7 @@ function action_getAuditLog(params) {
 
 function action_listUsers(params) {
   requireAdmin(params);
-  return { rows: users.map(u => ({ id: u.id, username: u.username, role: u.role, createdAt: u.createdAt })) };
+  return { rows: users.map(u => ({ id: u.id, username: u.username, role: u.role, status: u.status, createdAt: u.createdAt })) };
 }
 
 function action_addUser(params) {
@@ -301,21 +308,27 @@ function action_addUser(params) {
   const username = String(data.username).trim();
   const role = String(data.role).trim();
   const password = String(data.password);
+  const status = isBlank(data.status) ? 'active' : String(data.status).trim();
+  if (!USER_STATUSES.includes(status)) throw new AppError('VALIDATION_ERROR', 'Status must be "active" or "inactive".');
   if (username.length < 3) throw new AppError('VALIDATION_ERROR', 'Username must be at least 3 characters.');
   if (!USER_ROLES.includes(role)) throw new AppError('VALIDATION_ERROR', 'Role must be "admin", "employee", or "hr".');
   if (password.length < 6) throw new AppError('VALIDATION_ERROR', 'Password must be at least 6 characters.');
   if (users.some(u => u.username.toLowerCase() === username.toLowerCase())) {
     throw new AppError('DUPLICATE_USER', 'A user with this username already exists.');
   }
-  const user = { id: nextUserId++, username, password, role, createdAt: nowIso() };
+  const user = { id: nextUserId++, username, password, role, status, createdAt: nowIso() };
   users.push(user);
-  return { id: user.id, username: user.username, role: user.role, createdAt: user.createdAt };
+  return { id: user.id, username: user.username, role: user.role, status: user.status, createdAt: user.createdAt };
 }
 
 function action_updateUser(params) {
-  requireAdmin(params);
+  const session = requireAdmin(params);
   const data = params.data || {};
   requireFields(data, ['id']);
+  // Nobody — not even an admin — sets another user's password; each user changes their own via changePassword.
+  if (!isBlank(data.password)) {
+    throw new AppError('FORBIDDEN', 'Passwords can only be changed by the account owner (Settings > Change Password).');
+  }
   const user = users.find(u => u.id === Number(data.id));
   if (!user) throw new AppError('NOT_FOUND', 'User not found.');
 
@@ -328,15 +341,41 @@ function action_updateUser(params) {
     }
     changes.role = role;
   }
-  if (!isBlank(data.password)) {
-    const password = String(data.password);
-    if (password.length < 6) throw new AppError('VALIDATION_ERROR', 'Password must be at least 6 characters.');
-    changes.password = password;
+  if (!isBlank(data.status)) {
+    const status = String(data.status).trim();
+    if (!USER_STATUSES.includes(status)) throw new AppError('VALIDATION_ERROR', 'Status must be "active" or "inactive".');
+    if (status === 'inactive' && user.username === session.username) {
+      throw new AppError('SELF_DEACTIVATE', 'You cannot deactivate your own account.');
+    }
+    if (status === 'inactive' && user.role === 'admin' &&
+        users.filter(u => u.role === 'admin' && u.status !== 'inactive' && u.id !== user.id).length === 0) {
+      throw new AppError('LAST_ADMIN', 'At least one active admin account must remain.');
+    }
+    changes.status = status;
   }
-  if (!Object.keys(changes).length) throw new AppError('VALIDATION_ERROR', 'Nothing to update — change the role or set a new password.');
+  if (!Object.keys(changes).length) throw new AppError('VALIDATION_ERROR', 'Nothing to update — change the role or the status.');
 
   Object.assign(user, changes);
-  return { id: user.id, username: user.username, role: user.role };
+  // Deactivation takes effect immediately: end any session the user already has open.
+  if (changes.status === 'inactive') {
+    for (const [token, s] of sessions) if (s.username === user.username) sessions.delete(token);
+  }
+  return { id: user.id, username: user.username, role: user.role, status: user.status };
+}
+
+/** Any logged-in user changes their OWN password; the current password must be supplied. */
+function action_changePassword(params) {
+  const session = requireSession(params);
+  const data = params.data || {};
+  requireFields(data, ['currentPassword', 'newPassword']);
+  const newPassword = String(data.newPassword);
+  if (newPassword.length < 6) throw new AppError('VALIDATION_ERROR', 'New password must be at least 6 characters.');
+  const user = users.find(u => u.username === session.username);
+  if (!user) throw new AppError('NOT_FOUND', 'User not found.');
+  if (user.password !== String(data.currentPassword)) throw new AppError('INVALID_CREDENTIALS', 'Current password is incorrect.');
+  user.password = newPassword;
+  for (const [token, s] of sessions) if (s.username === user.username && token !== params.token) sessions.delete(token);
+  return { changed: true };
 }
 
 function action_deleteUser(params) {
@@ -346,7 +385,7 @@ function action_deleteUser(params) {
   if (idx === -1) throw new AppError('NOT_FOUND', 'User not found.');
   const user = users[idx];
   if (user.username === session.username) throw new AppError('SELF_DELETE', 'You cannot delete your own account.');
-  if (user.role === 'admin' && users.filter(u => u.role === 'admin' && u.id !== id).length === 0) {
+  if (user.role === 'admin' && users.filter(u => u.role === 'admin' && u.status !== 'inactive' && u.id !== id).length === 0) {
     throw new AppError('LAST_ADMIN', 'At least one admin account must remain.');
   }
   users.splice(idx, 1);
@@ -685,7 +724,7 @@ function syncPaymentTypeForStudent(studentId, paymentType) {
 }
 
 function action_getPayments(params) {
-  requireAdmin(params); // Payments is an admin-only section — employees have no access at all
+  requireRole(params, PAYMENT_ROLES); // hr has add-only access — no view
   const rows = params.latestOnly ? Object.values(latestPerStudent(db.payments)) : db.payments;
   return paginateAndSort(rows, {
     search: params.search, searchFields: ['Payment ID', 'Student ID', 'Student Name', 'Payment Method', 'Payment Type'],
@@ -695,7 +734,7 @@ function action_getPayments(params) {
 }
 
 function action_savePayment(params) {
-  const session = requireRole(params, ADD_ONLY_ROLES); // hr may add a payment but never view/edit/delete one
+  const session = requireRole(params, PAYMENT_ADD_ROLES); // hr may add a payment but never view/edit/delete one
   const data = params.data || {};
   requireFields(data, ['Student ID', 'Total Course Fee', 'Payment Received', 'Payment Method']);
   validatePaymentMethod(data['Payment Method']);
@@ -732,7 +771,7 @@ function action_savePayment(params) {
 }
 
 function action_updatePayment(params) {
-  const session = requireAdmin(params);
+  const session = requireRole(params, PAYMENT_ROLES);
   const data = params.data || {};
   requireFields(data, ['_row', 'Total Course Fee', 'Payment Received', 'Payment Method']);
   validatePaymentMethod(data['Payment Method']);
@@ -769,7 +808,7 @@ function action_updatePayment(params) {
 }
 
 function action_deletePayment(params) {
-  const session = requireAdmin(params);
+  const session = requireRole(params, PAYMENT_ROLES);
   const rowIndex = Number(params.data && params.data['_row']);
   const idx = db.payments.findIndex(p => p._row === rowIndex);
   if (idx === -1) throw new AppError('NOT_FOUND', 'Payment record not found.');
@@ -975,7 +1014,7 @@ const ACTIONS = {
   getDocuments: action_getDocuments, saveDocument: action_saveDocument, updateDocument: action_updateDocument, deleteDocument: action_deleteDocument,
   getPayments: action_getPayments, savePayment: action_savePayment, updatePayment: action_updatePayment, deletePayment: action_deletePayment,
   dashboardStats: action_dashboardStats, reports: action_reports,
-  listUsers: action_listUsers, addUser: action_addUser, updateUser: action_updateUser, deleteUser: action_deleteUser,
+  listUsers: action_listUsers, addUser: action_addUser, updateUser: action_updateUser, changePassword: action_changePassword, deleteUser: action_deleteUser,
   getAuditLog: action_getAuditLog
 };
 

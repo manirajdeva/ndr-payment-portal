@@ -4,11 +4,15 @@
  *
  * Portal logins live in the backend `users` table and come in three roles:
  *   admin    — full access, including adding/removing other users
- *   employee — full add/edit/delete on Enquiries, Job Status & Documents,
- *              but no Payments access and cannot manage users
+ *   employee — full add/edit/delete on Enquiries, Job Status, Documents
+ *              & Payments, but cannot manage users
  *   hr       — full add/edit/delete on Enquiries & Job Status, but only
  *              add access (no view/edit/delete) on Documents & Payments,
  *              and cannot manage users
+ *
+ * Each user has a status: 'active' can log in, 'inactive' cannot (admin-only
+ * toggle). Nobody sets another user's password — each user changes their own
+ * from Account > Change My Password.
  *
  * Unlike the record tables this is a low-traffic screen, so it just
  * reloads the list after each change instead of doing optimistic UI.
@@ -20,7 +24,7 @@ const Settings = (() => {
 
   const ACCESS_TEXT = {
     admin: 'Add, edit, delete, manage users',
-    employee: 'Enquiries, Job Status & Documents: add/edit/delete · no Payments · no user management',
+    employee: 'Enquiries, Job Status, Documents & Payments: add/edit/delete · no user management',
     hr: 'Enquiries & Job Status: add/edit/delete · Documents & Payments: add only · no user management',
     viewer: 'View only'
   };
@@ -29,13 +33,13 @@ const Settings = (() => {
     if (!Auth.isAdmin()) return; // the whole card is hidden for non-admins
     const tbody = document.getElementById('userTableBody');
     if (!tbody) return;
-    tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted py-4">Loading users...</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted py-4">Loading users...</td></tr>`;
     try {
       const { rows } = await Api.listUsers();
       cache = rows || [];
       renderTable(cache);
     } catch (err) {
-      tbody.innerHTML = `<tr><td colspan="5" class="text-center text-danger py-4">${Utils.escapeHtml(err.message)}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="6" class="text-center text-danger py-4">${Utils.escapeHtml(err.message)}</td></tr>`;
     }
   }
 
@@ -43,7 +47,7 @@ const Settings = (() => {
     const tbody = document.getElementById('userTableBody');
     const me = Auth.getUsername();
     if (!rows.length) {
-      tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted py-4">No users found.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted py-4">No users found.</td></tr>`;
       return;
     }
     tbody.innerHTML = rows.map(u => {
@@ -53,6 +57,7 @@ const Settings = (() => {
       <tr>
         <td class="fw-semibold">${Utils.escapeHtml(u.username)}${isMe ? ' <span class="text-muted fw-normal">(you)</span>' : ''}</td>
         <td>${Utils.escapeHtml(u.role)}</td>
+        <td>${u.status === 'inactive' ? '<span class="badge bg-secondary">Inactive</span>' : '<span class="badge bg-success">Active</span>'}</td>
         <td class="text-muted small">${Utils.escapeHtml(ACCESS_TEXT[u.role] || '—')}</td>
         <td class="text-muted small">${u.createdAt ? Utils.formatDate(u.createdAt) : '—'}</td>
         <td>
@@ -72,6 +77,9 @@ const Settings = (() => {
     document.getElementById('userIdHidden').value = '';
     document.getElementById('userUsername').readOnly = false;
     document.getElementById('userRole').value = 'employee';
+    document.getElementById('userStatus').value = 'active';
+    document.getElementById('userStatus').disabled = false;
+    document.getElementById('userPasswordGroup').classList.remove('d-none');
     document.getElementById('userPasswordLabel').innerHTML = 'Password <span class="text-danger">*</span>';
     document.getElementById('userPasswordHint').textContent = 'At least 6 characters.';
     resetPasswordVisibility();
@@ -87,8 +95,14 @@ const Settings = (() => {
     document.getElementById('userUsername').value = user.username;
     document.getElementById('userUsername').readOnly = true; // renaming = a different login; add a new user instead
     document.getElementById('userRole').value = user.role;
-    document.getElementById('userPasswordLabel').textContent = 'New password';
-    document.getElementById('userPasswordHint').textContent = 'Leave blank to keep the current password. At least 6 characters otherwise.';
+    document.getElementById('userStatus').value = user.status === 'inactive' ? 'inactive' : 'active';
+    const isMe = user.username === Auth.getUsername();
+    document.getElementById('userStatus').disabled = isMe; // can't deactivate yourself
+    document.getElementById('userStatusHint').textContent = isMe
+      ? 'You cannot change your own status.'
+      : 'Inactive users cannot log in and are signed out immediately.';
+    // Passwords are never set on someone else's behalf — each user changes their own.
+    document.getElementById('userPasswordGroup').classList.add('d-none');
     resetPasswordVisibility();
     new bootstrap.Modal('#userModal').show();
   }
@@ -98,22 +112,22 @@ const Settings = (() => {
     const id = document.getElementById('userIdHidden').value;
     const username = document.getElementById('userUsername').value.trim();
     const role = document.getElementById('userRole').value;
+    const status = document.getElementById('userStatus').value;
     const password = document.getElementById('userPassword').value;
 
     if (!id && username.length < 3) { Utils.error('Username must be at least 3 characters.'); return; }
     if (!id && password.length < 6) { Utils.error('Password must be at least 6 characters.'); return; }
-    if (id && password && password.length < 6) { Utils.error('Password must be at least 6 characters.'); return; }
 
     const btn = document.getElementById('userSaveBtn');
     btn.disabled = true;
     try {
       if (id) {
         const payload = { id: Number(id), role };
-        if (password) payload.password = password;
+        if (!document.getElementById('userStatus').disabled) payload.status = status;
         await Api.updateUser(payload);
         Utils.success('User updated.');
       } else {
-        await Api.addUser({ username, role, password });
+        await Api.addUser({ username, role, status, password });
         Utils.success('User added.');
       }
       bootstrap.Modal.getInstance(document.getElementById('userModal'))?.hide();
@@ -163,7 +177,35 @@ const Settings = (() => {
     if (icon) icon.className = 'fa-solid fa-eye';
   }
 
+  function openChangePasswordModal() {
+    document.getElementById('changePasswordForm').reset();
+    new bootstrap.Modal('#changePasswordModal').show();
+  }
+
+  async function handleChangePassword(e) {
+    e.preventDefault();
+    const currentPassword = document.getElementById('cpCurrent').value;
+    const newPassword = document.getElementById('cpNew').value;
+    const confirm = document.getElementById('cpConfirm').value;
+    if (newPassword.length < 6) { Utils.error('New password must be at least 6 characters.'); return; }
+    if (newPassword !== confirm) { Utils.error('New password and confirmation do not match.'); return; }
+
+    const btn = document.getElementById('cpSaveBtn');
+    btn.disabled = true;
+    try {
+      await Api.changePassword({ currentPassword, newPassword });
+      bootstrap.Modal.getInstance(document.getElementById('changePasswordModal'))?.hide();
+      Utils.success('Password changed.');
+    } catch (err) {
+      Utils.error(err.message);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
   function init() {
+    document.getElementById('changePasswordBtn')?.addEventListener('click', openChangePasswordModal);
+    document.getElementById('changePasswordForm')?.addEventListener('submit', handleChangePassword);
     if (wired) return;
     const addBtn = document.getElementById('userAddBtn');
     const form = document.getElementById('userForm');

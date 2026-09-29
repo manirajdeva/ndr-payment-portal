@@ -97,7 +97,7 @@ const App = (() => {
     const role = Auth.getRole();
     document.getElementById('settingsRole').textContent =
       role === 'admin' ? 'Admin (full access · manage users)' :
-      role === 'employee' ? 'Employee (add/edit/delete Enquiries, Job Status & Documents; no Payments; no user management)' :
+      role === 'employee' ? 'Employee (add/edit/delete Enquiries, Job Status, Documents & Payments; no user management)' :
       role === 'hr' ? 'HR (add/edit/delete Enquiries & Job Status; add-only Documents & Payments; no user management)' :
       'Viewer (read-only)';
 

@@ -352,10 +352,11 @@
                 <tr><td class="text-muted">Session expires</td><td class="fw-semibold" id="settingsExpiry">-</td></tr>
                 <tr><td class="text-muted">Backend</td><td class="fw-semibold" id="settingsBackend">-</td></tr>
               </table>
+              <button class="btn btn-outline-primary btn-sm mb-3" id="changePasswordBtn"><i class="fa-solid fa-key me-1"></i>Change My Password</button>
               <div class="alert alert-info small mb-0">
                 <strong>Admins</strong> have full access, including Payments and managing user logins.
-                <strong>Employees</strong> can add, edit and delete Student Enquiries, Job Status and
-                Documents, but have no access to the Payments section and cannot manage users.
+                <strong>Employees</strong> can add, edit and delete Student Enquiries, Job Status,
+                Documents and Payments, but cannot manage users.
                 <strong>HR</strong> can add, edit and delete Student Enquiries and Job Status, but only
                 add new Documents and Payments (no viewing, editing or deleting existing records), and
                 cannot manage users.
@@ -382,7 +383,7 @@
               <div class="table-toolbar">
                 <div>
                   <div class="section-title mb-0">User Management</div>
-                  <div class="text-muted small">admin = full access &nbsp;·&nbsp; employee = full Enquiries, Job Status &amp; Documents, no Payments, no user management &nbsp;·&nbsp; hr = full Enquiries &amp; Job Status, add-only Documents &amp; Payments, no user management</div>
+                  <div class="text-muted small">admin = full access &nbsp;·&nbsp; employee = full Enquiries, Job Status, Documents &amp; Payments, no user management &nbsp;·&nbsp; hr = full Enquiries &amp; Job Status, add-only Documents &amp; Payments, no user management</div>
                 </div>
                 <button class="btn btn-primary btn-sm" id="userAddBtn"><i class="fa-solid fa-user-plus me-1"></i>Add User</button>
               </div>
@@ -392,6 +393,7 @@
                     <tr>
                       <th>Username</th>
                       <th>Role</th>
+                      <th>Status</th>
                       <th>Access</th>
                       <th>Created</th>
                       <th>Actions</th>
@@ -692,6 +694,38 @@
   </div>
 </div>
 
+<div class="modal fade" id="changePasswordModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Change My Password</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form id="changePasswordForm">
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">Current password <span class="text-danger">*</span></label>
+            <input type="password" class="form-control" id="cpCurrent" autocomplete="current-password" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">New password <span class="text-danger">*</span></label>
+            <input type="password" class="form-control" id="cpNew" autocomplete="new-password" required>
+            <div class="form-text">At least 6 characters. You can only change your own password.</div>
+          </div>
+          <div class="mb-1">
+            <label class="form-label">Confirm new password <span class="text-danger">*</span></label>
+            <input type="password" class="form-control" id="cpConfirm" autocomplete="new-password" required>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="cpSaveBtn">Change Password</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
 <div class="modal fade" id="userModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
@@ -709,12 +743,20 @@
           <div class="mb-3">
             <label class="form-label">Role <span class="text-danger">*</span></label>
             <select class="form-select" id="userRole" required>
-              <option value="employee">Employee — full Enquiries &amp; Job Status, no Payments</option>
+              <option value="employee">Employee — full Enquiries, Job Status, Documents &amp; Payments</option>
               <option value="hr">HR — full Enquiries &amp; Job Status, add-only Documents &amp; Payments</option>
               <option value="admin">Admin — full access, manage users</option>
             </select>
           </div>
-          <div class="mb-1">
+          <div class="mb-3">
+            <label class="form-label">Status <span class="text-danger">*</span></label>
+            <select class="form-select" id="userStatus" required>
+              <option value="active">Active — can log in</option>
+              <option value="inactive">Inactive — login access removed</option>
+            </select>
+            <div class="form-text" id="userStatusHint">Only admins can change a user's status.</div>
+          </div>
+          <div class="mb-1" id="userPasswordGroup">
             <label class="form-label" id="userPasswordLabel">Password <span class="text-danger">*</span></label>
             <div class="input-group">
               <input type="password" class="form-control" id="userPassword" autocomplete="new-password">

@@ -118,6 +118,7 @@ async function loadAuditLog(entity, { studentId, recordKey } = {}) {
  * interpolating them into the ALTER below is safe.
  */
 const ADDED_COLUMNS = [
+  { table: 'users', column: 'status', definition: "VARCHAR(10) NOT NULL DEFAULT 'active' AFTER role" },
   { table: 'payments', column: 'payment_type', definition: "VARCHAR(50) NOT NULL DEFAULT '' AFTER payment_method" }
 ];
 
@@ -509,8 +510,8 @@ async function findUserByUsername(username) {
 
 /** Every login, newest first, without the salt/hash columns — for the Settings > User Management table. */
 async function listUsers() {
-  const [rows] = await pool.query('SELECT id, username, role, created_at FROM users ORDER BY id');
-  return rows.map(r => ({ id: r.id, username: r.username, role: r.role, createdAt: r.created_at }));
+  const [rows] = await pool.query('SELECT id, username, role, status, created_at FROM users ORDER BY id');
+  return rows.map(r => ({ id: r.id, username: r.username, role: r.role, status: r.status || 'active', createdAt: r.created_at }));
 }
 
 async function findUserById(id) {
@@ -518,27 +519,28 @@ async function findUserById(id) {
   return rows[0] || null;
 }
 
-/** How many admin accounts exist other than `excludeId` — used to refuse removing the last admin. */
+/** How many ACTIVE admin accounts exist other than `excludeId` — used to refuse removing/deactivating the last admin. */
 async function countOtherAdmins(excludeId) {
   const [rows] = await pool.query(
-    'SELECT COUNT(*) AS n FROM users WHERE role = ? AND id <> ?', ['admin', excludeId || 0]
+    'SELECT COUNT(*) AS n FROM users WHERE role = ? AND status = ? AND id <> ?', ['admin', 'active', excludeId || 0]
   );
   return Number(rows[0].n);
 }
 
-async function insertUser({ username, salt, passwordHash, role, createdAt }) {
+async function insertUser({ username, salt, passwordHash, role, status, createdAt }) {
   const [result] = await pool.query(
-    'INSERT INTO users (username, salt, password_hash, role, created_at) VALUES (?, ?, ?, ?, ?)',
-    [username, salt, passwordHash, role, createdAt]
+    'INSERT INTO users (username, salt, password_hash, role, status, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+    [username, salt, passwordHash, role, status || 'active', createdAt]
   );
-  return { id: result.insertId, username, role, createdAt };
+  return { id: result.insertId, username, role, status: status || 'active', createdAt };
 }
 
-/** Updates any of role / salt / password_hash that are present in `fields`. */
+/** Updates any of role / status / salt / password_hash that are present in `fields`. */
 async function updateUserRow(id, fields) {
   const sets = [];
   const values = [];
   if (fields.role !== undefined) { sets.push('role = ?'); values.push(fields.role); }
+  if (fields.status !== undefined) { sets.push('status = ?'); values.push(fields.status); }
   if (fields.salt !== undefined) { sets.push('salt = ?'); values.push(fields.salt); }
   if (fields.passwordHash !== undefined) { sets.push('password_hash = ?'); values.push(fields.passwordHash); }
   if (!sets.length) return 0;
@@ -561,6 +563,11 @@ async function getSession(token) {
   return rows[0] || null;
 }
 
+/** Ends every session of `username`, optionally sparing one token (the caller's own). */
+async function deleteSessionsForUser(username, exceptToken) {
+  await pool.query('DELETE FROM sessions WHERE username = ? AND token <> ?', [username, exceptToken || '']);
+}
+
 async function deleteSession(token) {
   await pool.query('DELETE FROM sessions WHERE token = ?', [token]);
 }
@@ -572,6 +579,6 @@ module.exports = {
   loadDocuments, insertDocument, updateDocumentRow, deleteDocumentRow,
   loadPayments, insertPayment, updatePaymentRow, deletePaymentRow, sumPaymentsForStudent, syncPaymentTypeForStudent, getStudentIdForPaymentRow,
   generateStudentId, nextPaymentId,
-  findUserByUsername, listUsers, findUserById, countOtherAdmins, insertUser, updateUserRow, deleteUserRow,
+  findUserByUsername, listUsers, findUserById, countOtherAdmins, insertUser, updateUserRow, deleteUserRow, deleteSessionsForUser,
   createSession, getSession, deleteSession
 };
