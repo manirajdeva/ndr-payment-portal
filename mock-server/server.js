@@ -326,10 +326,6 @@ function action_updateUser(params) {
   const session = requireAdmin(params);
   const data = params.data || {};
   requireFields(data, ['id']);
-  // Nobody — not even an admin — sets another user's password; each user changes their own via changePassword.
-  if (!isBlank(data.password)) {
-    throw new AppError('FORBIDDEN', 'Passwords can only be changed by the account owner (Settings > Change Password).');
-  }
   const user = users.find(u => u.id === Number(data.id));
   if (!user) throw new AppError('NOT_FOUND', 'User not found.');
 
@@ -354,9 +350,17 @@ function action_updateUser(params) {
     }
     changes.status = status;
   }
-  if (!Object.keys(changes).length) throw new AppError('VALIDATION_ERROR', 'Nothing to update — change the role or the status.');
+  if (!isBlank(data.password)) {
+    if (String(data.password).length < 6) throw new AppError('VALIDATION_ERROR', 'Password must be at least 6 characters.');
+    changes.password = String(data.password);
+  }
+  if (!Object.keys(changes).length) throw new AppError('VALIDATION_ERROR', 'Nothing to update — change the role, status or password.');
 
   Object.assign(user, changes);
+  // An admin-set password signs the user out everywhere (except the admin's own current session).
+  if (changes.password) {
+    for (const [token, s] of sessions) if (s.username === user.username && token !== params.token) sessions.delete(token);
+  }
   // Deactivation takes effect immediately: end any session the user already has open.
   if (changes.status === 'inactive') {
     for (const [token, s] of sessions) if (s.username === user.username) sessions.delete(token);

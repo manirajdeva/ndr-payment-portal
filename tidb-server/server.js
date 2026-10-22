@@ -584,10 +584,6 @@ async function action_updateUser(params) {
   const session = await requireAdmin(params);
   const data = params.data || {};
   requireFields(data, ['id']);
-  // Nobody — not even an admin — sets another user's password; each user changes their own via changePassword.
-  if (!isBlank(data.password)) {
-    throw new AppError('FORBIDDEN', 'Passwords can only be changed by the account owner (Settings > Change Password).');
-  }
   const id = Number(data.id);
   const user = await store.findUserById(id);
   if (!user) throw new AppError('NOT_FOUND', 'User not found.');
@@ -612,9 +608,17 @@ async function action_updateUser(params) {
     }
     fields.status = status;
   }
-  if (!Object.keys(fields).length) throw new AppError('VALIDATION_ERROR', 'Nothing to update — change the role or the status.');
+  if (!isBlank(data.password)) {
+    const password = String(data.password);
+    if (password.length < 6) throw new AppError('VALIDATION_ERROR', 'Password must be at least 6 characters.');
+    fields.salt = crypto.randomUUID();
+    fields.passwordHash = hashPassword(password, fields.salt);
+  }
+  if (!Object.keys(fields).length) throw new AppError('VALIDATION_ERROR', 'Nothing to update — change the role, status or password.');
 
   await store.updateUserRow(id, fields);
+  // An admin-set password signs the user out everywhere (except the admin's own current session).
+  if (fields.passwordHash) await store.deleteSessionsForUser(user.username, params.token);
   // Deactivation takes effect immediately: end any session the user already has open.
   if (fields.status === 'inactive') await store.deleteSessionsForUser(user.username);
   return { id, username: user.username, role: fields.role || user.role, status: fields.status || user.status };

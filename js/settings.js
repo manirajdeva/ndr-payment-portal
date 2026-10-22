@@ -11,8 +11,8 @@
  *              and cannot manage users
  *
  * Each user has a status: 'active' can log in, 'inactive' cannot (admin-only
- * toggle). Nobody sets another user's password — each user changes their own
- * from Account > Change My Password.
+ * toggle). Admins can reset any user's password from Edit User; each user
+ * can also change their own from Account > Change My Password.
  *
  * Unlike the record tables this is a low-traffic screen, so it just
  * reloads the list after each change instead of doing optimistic UI.
@@ -101,8 +101,10 @@ const Settings = (() => {
     document.getElementById('userStatusHint').textContent = isMe
       ? 'You cannot change your own status.'
       : 'Inactive users cannot log in and are signed out immediately.';
-    // Passwords are never set on someone else's behalf — each user changes their own.
-    document.getElementById('userPasswordGroup').classList.add('d-none');
+    // Admins can reset any user's password; leaving it blank keeps the current one.
+    document.getElementById('userPasswordGroup').classList.remove('d-none');
+    document.getElementById('userPasswordLabel').textContent = 'New Password';
+    document.getElementById('userPasswordHint').textContent = 'Leave blank to keep the current password. At least 6 characters.';
     resetPasswordVisibility();
     new bootstrap.Modal('#userModal').show();
   }
@@ -116,7 +118,7 @@ const Settings = (() => {
     const password = document.getElementById('userPassword').value;
 
     if (!id && username.length < 3) { Utils.error('Username must be at least 3 characters.'); return; }
-    if (!id && password.length < 6) { Utils.error('Password must be at least 6 characters.'); return; }
+    if ((!id || password) && password.length < 6) { Utils.error('Password must be at least 6 characters.'); return; }
 
     const btn = document.getElementById('userSaveBtn');
     btn.disabled = true;
@@ -124,6 +126,7 @@ const Settings = (() => {
       if (id) {
         const payload = { id: Number(id), role };
         if (!document.getElementById('userStatus').disabled) payload.status = status;
+        if (password) payload.password = password;
         await Api.updateUser(payload);
         Utils.success('User updated.');
       } else {
