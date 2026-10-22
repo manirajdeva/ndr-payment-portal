@@ -2,6 +2,7 @@ services:
   - type: web
     name: ndr-tidb-api
     runtime: node
+    branch: master
     rootDir: tidb-server
     plan: free
     autoDeploy: true
