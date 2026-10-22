@@ -17,7 +17,7 @@
   <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
 
   <aside class="sidebar" id="sidebar">
-    <div class="sidebar-brand">
+    <div class="sidebar-brand" id="brandHome" style="cursor:pointer;">
       <div class="logo-box"><i class="fa-solid fa-graduation-cap"></i></div>
       <div class="brand-text">
         <strong>NDR EDTECH</strong>
@@ -25,7 +25,7 @@
       </div>
     </div>
     <nav class="sidebar-nav" id="sidebarNav">
-      <a class="nav-link active" data-section="dashboard"><i class="fa-solid fa-gauge-high"></i> Dashboard</a>
+      <a class="nav-link admin-staff-only" data-section="dashboard"><i class="fa-solid fa-gauge-high"></i> Dashboard</a>
       <a class="nav-link" data-section="enquiries"><i class="fa-solid fa-user-plus"></i> Student Enquiries</a>
       <a class="nav-link" data-section="jobs"><i class="fa-solid fa-briefcase"></i> Job Status</a>
       <a class="nav-link" data-section="documents"><i class="fa-solid fa-file-lines"></i> Documents</a>
@@ -62,8 +62,15 @@
 
     <main class="content-area">
 
+      <!-- ===================== HR HOME (hr has no dashboard access) ===================== -->
+      <section class="app-section" id="section-hrhome">
+        <div class="d-flex align-items-center justify-content-center" style="min-height:60vh;">
+          <h1 class="fw-bold text-center">NDR EDTECH</h1>
+        </div>
+      </section>
+
       <!-- ===================== DASHBOARD ===================== -->
-      <section class="app-section active" id="section-dashboard">
+      <section class="app-section" id="section-dashboard">
         <div class="row g-3 mb-1" id="statCardsRow"></div>
 
         <div class="row g-3 mt-1">

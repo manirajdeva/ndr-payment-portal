@@ -223,7 +223,8 @@ function latestPerStudent(jobRows) {
 let nextUserId = 1;
 const users = [
   { id: nextUserId++, username: ADMIN_USERNAME, password: ADMIN_PASSWORD, role: 'admin', status: 'active', createdAt: nowIso() },
-  { id: nextUserId++, username: 'hrndr@admin', password: 'Hr@2026@', role: 'employee', status: 'active', createdAt: nowIso() }
+  { id: nextUserId++, username: 'hrndr@admin', password: 'Hr@2026@', role: 'employee', status: 'active', createdAt: nowIso() },
+  { id: nextUserId++, username: 'hr.test', password: 'Hr@12345', role: 'hr', status: 'active', createdAt: nowIso() }
 ];
 
 function action_login(params) {
@@ -821,7 +822,8 @@ function action_deletePayment(params) {
 /* ---------------- Dashboard ---------------- */
 
 function action_dashboardStats(params) {
-  requireSession(params);
+  const session = requireSession(params);
+  if (session.role === 'hr') throw new AppError('FORBIDDEN', 'Your account does not have access to the dashboard.');
   const students = db.students, jobs = db.jobs, payments = db.payments;
   const today = todayISO();
   const thisMonth = monthKey(today);

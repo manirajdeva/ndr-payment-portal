@@ -422,7 +422,8 @@ async function action_deletePayment(params) {
 /* ---------------- Dashboard ---------------- */
 
 async function action_dashboardStats(params) {
-  await requireSession(params);
+  const session = await requireSession(params);
+  if (session.role === 'hr') throw new AppError('FORBIDDEN', 'Your account does not have access to the dashboard.');
   const [students, jobs, payments] = await Promise.all([store.loadStudents(), store.loadJobs(), store.loadPayments()]);
   const today = todayISO();
   const thisMonth = monthKey(today);

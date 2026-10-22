@@ -8,6 +8,7 @@
 
 const App = (() => {
   const sectionTitles = {
+    hrhome: ['NDR EDTECH', ''],
     dashboard: ['Dashboard', "Overview of your institute's performance"],
     enquiries: ['Student Enquiries', 'Manage student enquiries and admissions'],
     jobs: ['Job Status', 'Track placement progress for every student'],
@@ -58,6 +59,8 @@ const App = (() => {
       const ok = await Utils.confirmDialog({ title: 'Log out?', text: 'You will need to log in again to access the portal.', confirmText: 'Log out', danger: true });
       if (ok) Auth.logout();
     });
+
+    document.getElementById('brandHome')?.addEventListener('click', () => showSection(Auth.isHr() ? 'hrhome' : 'dashboard'));
 
     wireTheme();
     wireUserInfo();
@@ -111,6 +114,7 @@ const App = (() => {
       document.querySelectorAll('.pay-access').forEach(el => el.classList.add('d-none'));
     }
     if (Auth.isHr()) {
+      document.querySelectorAll('.admin-staff-only').forEach(el => el.classList.add('d-none'));
       document.querySelectorAll('.list-view-only').forEach(el => el.classList.add('d-none'));
       document.querySelectorAll('.hr-only').forEach(el => el.classList.remove('d-none'));
     }
@@ -267,5 +271,5 @@ document.addEventListener('DOMContentLoaded', () => {
 
   App.wireShell();
   App.onSectionActivate('dashboard', Dashboard.load);
-  App.showSection('dashboard');
+  App.showSection(Auth.isHr() ? 'hrhome' : 'dashboard');
 });
